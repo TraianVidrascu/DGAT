@@ -184,73 +184,74 @@ class KBNet(nn.Module):
         return h_prime, g_prime
 
 
-# class ConvKB(nn.Module):
-#     def __init__(self, input_size, channels, dropout=0.3, dev='cpu'):
-#         super(ConvKB, self).__init__()
-#
-#         self.conv = nn.Conv2d(3, channels, 1)
-#         self.weight = nn.Linear(input_size * channels, 1)
-#         self.dropout = nn.Dropout(dropout)
-#
-#         self.device = dev
-#         self.channels = channels
-#         self.input_size = input_size
-#
-#         self.loss_fct = nn.SoftMarginLoss()
-#
-#
-#
-#     def loss(self, y, t):
-#         return self.loss_fct(y, t)
-#
-#     def forward(self, h, g, edge_idx, edge_type):
-#         row, col = edge_idx
-#
-#         h = torch.cat([h[row][:, None, :], h[col][:, None, :], g[edge_type][:, None, :]], dim=1)
-#
-#         h = self.conv(h)
-#         h = torch.relu(h)
-#         h = self.dropout(h)
-#         h = h.view(-1, self.channels * self.input_size)
-#
-#         h = torch.relu(h)
-#
-#         h = self.weight(h).squeeze()
-#         return h
-
-
-# copied code for ConvKB
 class ConvKB(nn.Module):
-    def __init__(self, input_dim, input_seq_len, in_channels, out_channels, drop_prob, dev):
-        super().__init__()
+    def __init__(self, input_size, channels, dropout=0.3, dev='cpu'):
+        super(ConvKB, self).__init__()
 
-        self.conv_layer = nn.Conv2d(
-            in_channels, out_channels, (1, input_seq_len))  # kernel size -> 1*input_seq_length(i.e. 2)
-        self.dropout = nn.Dropout(drop_prob)
-        self.non_linearity = nn.ReLU()
-        self.fc_layer = nn.Linear((input_dim) * out_channels, 1)
+        self.conv = nn.Conv1d(3, channels, 1)
+        self.weight = nn.Linear(input_size * channels, 1)
+        self.dropout = nn.Dropout(dropout)
 
+        self.device = dev
+        self.channels = channels
+        self.input_size = input_size
+
+        self.loss_fct = nn.SoftMarginLoss()
         self.to(dev)
-        self._init_params()
 
-    def _init_params(self):
-        nn.init.xavier_normal_(self.fc_layer.weight, gain=1.414)
-        nn.init.xavier_normal_(self.conv_layer.weight, gain=1.414)
+    def loss(self, y, t):
+        return self.loss_fct(y, t)
 
     def forward(self, h, g, edge_idx, edge_type):
         row, col = edge_idx
-        conv_input = torch.cat([h[row][:, None, :], h[col][:, None, :], g[edge_type][:, None, :]], dim=1)
 
-        batch_size, length, dim = conv_input.size()
-        # assuming inputs are of the form ->
-        conv_input = conv_input.transpose(1, 2)
-        # batch * length(which is 3 here -> entity,relation,entity) * dim
-        # To make tensor of size 4, where second dim is for input channels
-        conv_input = conv_input.unsqueeze(1)
+        h = torch.cat([h[row][:, None, :], h[col][:, None, :], g[edge_type][:, None, :]], dim=1)
 
-        out_conv = self.dropout(
-            self.non_linearity(self.conv_layer(conv_input)))
+        h = self.conv(h)
+        h = torch.relu(h)
+        h = self.dropout(h)
+        h = h.view(-1, self.channels * self.input_size)
 
-        input_fc = out_conv.squeeze(-1).view(batch_size, -1)
-        output = self.fc_layer(input_fc)
-        return output
+        h = torch.relu(h)
+
+        h = self.weight(h).squeeze()
+
+        h = torch.sigmoid(h)
+
+        return h
+
+# copied code for ConvKB
+# class ConvKB(nn.Module):
+#     def __init__(self, input_dim, input_seq_len, in_channels, out_channels, drop_prob, dev):
+#         super().__init__()
+#
+#         self.conv_layer = nn.Conv2d(
+#             in_channels, out_channels, (1, input_seq_len))  # kernel size -> 1*input_seq_length(i.e. 2)
+#         self.dropout = nn.Dropout(drop_prob)
+#         self.non_linearity = nn.ReLU()
+#         self.fc_layer = nn.Linear((input_dim) * out_channels, 1)
+#
+#         self.to(dev)
+#         self._init_params()
+#
+#     def _init_params(self):
+#         nn.init.xavier_normal_(self.fc_layer.weight, gain=1.414)
+#         nn.init.xavier_normal_(self.conv_layer.weight, gain=1.414)
+#
+#     def forward(self, h, g, edge_idx, edge_type):
+#         row, col = edge_idx
+#         conv_input = torch.cat([h[row][:, None, :], h[col][:, None, :], g[edge_type][:, None, :]], dim=1)
+#
+#         batch_size, length, dim = conv_input.size()
+#         # assuming inputs are of the form ->
+#         conv_input = conv_input.transpose(1, 2)
+#         # batch * length(which is 3 here -> entity,relation,entity) * dim
+#         # To make tensor of size 4, where second dim is for input channels
+#         conv_input = conv_input.unsqueeze(1)
+#
+#         out_conv = self.dropout(
+#             self.non_linearity(self.conv_layer(conv_input)))
+#
+#         input_fc = out_conv.squeeze(-1).view(batch_size, -1)
+#         output = self.fc_layer(input_fc)
+#         return output

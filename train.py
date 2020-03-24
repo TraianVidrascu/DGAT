@@ -2,6 +2,7 @@ import argparse
 
 import torch
 import numpy as np
+import wandb
 
 from data.dataset import FB15Dataset
 from dataloader import DataLoader
@@ -35,16 +36,15 @@ def get_decoder(args):
     dropout = args.dropout
     dev = args.device
     input_size = args.output_encoder
-    heads = args.heads
 
-    model = ConvKB(input_size * heads, 3, 1, channels, drop_prob=dropout, dev=dev)
+    model = ConvKB(input_size, channels, dropout=dropout, dev=dev)
     return model
 
 
 def train_encoder(args, data_loader):
     # system parameters
     dev = args.device
-    eval = args.eval
+    eval = args.eval_encoder
     # training parameters
     lr = args.lr
     decay = args.decay_encoder
@@ -59,17 +59,20 @@ def train_encoder(args, data_loader):
 
     model = get_encoder(args, x_size, g_size)
 
+    wandb.watch(model, log="all")
+
     first = 0
-    if args.checkpoint:
-        model, first = load_model(model, ENCODER_CHECKPOINT)
+    # if args.checkpoint:
+    #     model, first = load_model(model, ENCODER_CHECKPOINT)
 
     optim = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
+
+    pos_edge_idx, edge_type = data_loader.graph2idx(graph, dev)
+    n = x.shape[0]
 
     for epoch in range(first, epochs):
         model.train()
 
-        pos_edge_idx, edge_type = data_loader.graph2idx(graph, dev)
-        n = x.shape[0]
         neg_edge_idx = data_loader.negative_samples(n, pos_edge_idx, dev)
 
         h_prime, g_prime = model(x, g, pos_edge_idx, edge_type)
@@ -81,7 +84,7 @@ def train_encoder(args, data_loader):
         loss.backward()
         optim.step()
 
-        save_model(model, loss.item(), epoch + 1, ENCODER_CHECKPOINT)
+        # save_model(model, loss.item(), epoch + 1, ENCODER_CHECKPOINT)
         save_best(model, loss.item(), epoch + 1, ENCODER_FILE, asc=False)
 
         if (epoch + 1) % eval == 0:
@@ -89,18 +92,18 @@ def train_encoder(args, data_loader):
                                      dev=dev)
 
             mr, mrr, hits = get_metrics(ranks)
-            print('EVALUATION: Epoch: %.3d' % (epoch + 1) + '; ' +
-                  'Mean Rank: %d' % mr + '; ' +
-                  'MRR: %.4f' % mrr + '; ' +
-                  'Hits@10: %.4f' % hits + ';' +
-                  'Train Loss: %.4f' % loss)
+            wandb.log({'Valid_MR_encoder': mr,
+                       'Valid_MRR_encoder': mrr,
+                       'Valid_Hits@10_encoder': hits,
+                       'Train_Loss_encoder': loss})
         else:
-            print('TRAIN: Epoch: %.3d' % (epoch + 1) + '; ' +
-                  'Train Loss: %.4f' % loss)
+            wandb.log({'Train_Loss_encoder': loss})
 
-    del pos_edge_idx, edge_type, x, h_prime, g_prime, model, loss, g, graph
+        del neg_edge_idx, h_prime, g_prime, loss
+        torch.cuda.empty_cache()
+
+    del pos_edge_idx, edge_type, x, g, graph, model
     torch.cuda.empty_cache()
-
 
 def embed_nodes(args, data):
     dev = args.device
@@ -126,17 +129,18 @@ def train_decoder(args, data_loader):
     lr = args.lr
     decay = args.decay_decoder
     epochs = args.epochs_decoder
-    eval = args.eval
+    eval = args.eval_decoder
     batch_size = args.decoder_batch_size
 
     _, _, graph = data_loader.load_train(dev)
     h, g = data_loader.load_embedding(dev)
 
     decoder = get_decoder(args)
+    wandb.watch(decoder, log="all")
 
     first = 0
-    if args.checkpoint:
-        decoder, first = load_model(decoder, DECODER_CHECKPOINT)
+    # if args.checkpoint:
+    #     decoder, first = load_model(decoder, DECODER_CHECKPOINT)
 
     optim = torch.optim.Adam(decoder.parameters(), lr=lr, weight_decay=decay)
 
@@ -173,20 +177,19 @@ def train_decoder(args, data_loader):
             loss_epoch += loss.item()
 
         loss_epoch /= (total_size / batch_size)
-        save_model(decoder, loss_epoch, epoch + 1, DECODER_CHECKPOINT)
+        # save_model(decoder, loss_epoch, epoch + 1, DECODER_CHECKPOINT)
         save_best(decoder, loss_epoch, epoch + 1, DECODER_FILE, asc=False)
+
         if (epoch + 1) % eval == 0:
             ranks = evaluate_decoder(decoder, data_loader, 'valid', max_batch=200, dev=args.device)
 
             mr, mrr, hits = get_metrics(ranks)
-            print('EVALUATION: Epoch: %.3d' % (epoch + 1) + '; ' +
-                  'Mean Rank: %d' % mr + '; ' +
-                  'MRR: %.4f' % mrr + '; ' +
-                  'Hits@10: %.4f' % hits + ';' +
-                  'Train Loss: %.4f' % loss_epoch)
+            wandb.log({'Valid_MR_decoder': mr,
+                       'Valid_MRR_decoder': mrr,
+                       'Valid_Hits@10_decoder': hits,
+                       'Train_Loss_decoder': loss_epoch})
         else:
-            print('TRAIN: Epoch: %.3d' % (epoch + 1) + '; ' +
-                  'Train Loss: %.4f' % loss_epoch)
+            wandb.log({'Train_Loss_decoder': loss_epoch})
 
 
 def load_decoder(args):
@@ -267,15 +270,16 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=5, help="After how many epochs to evaluate.")
-    parser.add_argument("--train_encoder", type=bool, default=True, help="Train the encoder.")
-    parser.add_argument("--train_decoder", type=bool, default=False, help="Train the decoder.")
-    parser.add_argument("--checkpoint", type=bool, default=False, help="Use checkpoint.")
+    parser.add_argument("--eval_encoder", type=int, default=100, help="After how many epochs to evaluate.")
+    parser.add_argument("--eval_decoder", type=int, default=10, help="After how many epochs to evaluate.")
+    parser.add_argument("--train_encoder", type=int, default=1, help="Train the encoder.")
+    parser.add_argument("--train_decoder", type=int, default=1, help="Train the decoder.")
+    # parser.add_argument("--checkpoint", type=bool, default=False, help="Use checkpoint.")
 
     # training parameters
     parser.add_argument("--epochs_encoder", type=int, default=3000, help="Number of training epochs for encoder.")
     parser.add_argument("--epochs_decoder", type=int, default=200, help="Number of training epochs for decoder.")
-    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
+    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate.")
     parser.add_argument("--decay_encoder", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--decay_decoder", type=float, default=1e-5, help="L2 normalization weight decay decoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
@@ -295,27 +299,30 @@ def main():
 
     args, cmdline_args = parser.parse_known_args()
 
+    # set up weights adn biases
+    wandb.init(project="DGAT", config=args)
+
     dataset = FB15Dataset()
     data_loader = DataLoader(dataset)
 
-    if args.train_encoder:
+    if args.train_encoder != 0:
         train_encoder(args, data_loader)
 
     h, g = embed_nodes(args, dataset)
 
     dataset.save_embedding(h, g)
 
-    if args.train_decoder:
+    if args.train_decoder != 0:
         train_decoder(args, data_loader)
 
     decoder = load_decoder(args).to()
-
     ranks = evaluate_decoder(decoder, data_loader, 'test', dev=args.device)
 
     mr, mrr, hits = get_metrics(ranks)
-    print('TEST: Mean Rank: %d' % mr + '; ' +
-          'MRR: %.4f' % mrr + '; ' +
-          'Hits@10: %.4f' % hits + ';')
+
+    wandb.log({'Test_MR_decoder': mr,
+               'Test_MRR_decoder': mrr,
+               'Test_Hits@10_decoder': hits})
 
 
 if __name__ == "__main__":

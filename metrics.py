@@ -8,7 +8,7 @@ def rank_triplet(scores, position):
     entries = np.stack([scores, labels]).transpose()
 
     df = pd.DataFrame(columns=['score', 'label'], data=entries)
-    df = df.sort_values(by=['score'], ascending=True)
+    df = df.sort_values(by=['score'], ascending=False)
     df.index = [i for i in range(1, len(scores) + 1)]
     rank = df[df['label'] == 1].index
     return rank
