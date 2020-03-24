@@ -105,6 +105,7 @@ def train_encoder(args, data_loader):
     del pos_edge_idx, edge_type, x, g, graph, model
     torch.cuda.empty_cache()
 
+
 def embed_nodes(args, data):
     dev = args.device
 
@@ -117,6 +118,7 @@ def embed_nodes(args, data):
     g_size = g.shape[1]
 
     encoder = get_encoder(args, x_size, g_size)
+    encoder = load_model(encoder, ENCODER_FILE)
 
     encoder.eval()
     with torch.no_grad():
@@ -307,10 +309,8 @@ def main():
 
     if args.train_encoder != 0:
         train_encoder(args, data_loader)
-
-    h, g = embed_nodes(args, dataset)
-
-    dataset.save_embedding(h, g)
+        h, g = embed_nodes(args, dataset)
+        dataset.save_embedding(h, g)
 
     if args.train_decoder != 0:
         train_decoder(args, data_loader)

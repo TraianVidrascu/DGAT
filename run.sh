@@ -10,8 +10,5 @@
 #SBATCH --mail-type=BEGIN,END
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
 
-module purge
-module load eb
-
-module load python
+conda acticate base
 python train.py
