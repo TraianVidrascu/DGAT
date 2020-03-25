@@ -212,11 +212,7 @@ class ConvKB(nn.Module):
         h = self.dropout(h)
         h = h.view(-1, self.channels * self.input_size)
 
-        h = torch.relu(h)
-
         h = self.weight(h).squeeze()
-
-        #h = torch.sigmoid(h)
 
         return h
 

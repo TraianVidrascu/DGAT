@@ -118,7 +118,7 @@ def embed_nodes(args, data):
     g_size = g.shape[1]
 
     encoder = get_encoder(args, x_size, g_size)
-    encoder = load_model(encoder, ENCODER_FILE)
+    encoder, _ = load_model(encoder, ENCODER_FILE)
 
     encoder.eval()
     with torch.no_grad():
