@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=DGAT thesis
+#SBATCH --job-name=DGAT
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=3
 #SBATCH --ntasks-per-node=1
