@@ -10,5 +10,5 @@
 #SBATCH --mail-type=BEGIN,END
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
 
-conda acticate base
+conda activate dgat
 python train.py

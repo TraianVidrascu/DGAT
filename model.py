@@ -216,7 +216,7 @@ class ConvKB(nn.Module):
 
         h = self.weight(h).squeeze()
 
-        h = torch.sigmoid(h)
+        #h = torch.sigmoid(h)
 
         return h
 

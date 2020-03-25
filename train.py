@@ -274,7 +274,7 @@ def main():
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval_encoder", type=int, default=100, help="After how many epochs to evaluate.")
     parser.add_argument("--eval_decoder", type=int, default=10, help="After how many epochs to evaluate.")
-    parser.add_argument("--train_encoder", type=int, default=1, help="Train the encoder.")
+    parser.add_argument("--train_encoder", type=int, default=0, help="Train the encoder.")
     parser.add_argument("--train_decoder", type=int, default=1, help="Train the decoder.")
     # parser.add_argument("--checkpoint", type=bool, default=False, help="Use checkpoint.")
 
@@ -285,7 +285,7 @@ def main():
     parser.add_argument("--decay_encoder", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--decay_decoder", type=float, default=1e-5, help="L2 normalization weight decay decoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
-    parser.add_argument("--decoder_batch_size", type=int, default=32000, help="Batch size for decode.")
+    parser.add_argument("--decoder_batch_size", type=int, default=16000, help="Batch size for decode.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1e-5, help="Margin for loss function.")
