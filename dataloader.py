@@ -14,6 +14,9 @@ class DataLoader:
         k = self.dataset.k
         return n, k
 
+    def get_name(self):
+        return self.dataset.name
+
     def load(self, fold, dev='cpu'):
         x, g, graph = self.dataset.load_fold(fold, dev)
         return x, g, graph
@@ -62,10 +65,10 @@ class DataLoader:
         x, y = triplet
 
         entities = torch.randperm(n)
-        triplets = torch.zeros(size=(2,n)).long()
+        triplets = torch.zeros(size=(2, n)).long()
         if head:
-            triplets[0,:] = entities
-            triplets[1,:] = y
+            triplets[0, :] = entities
+            triplets[1, :] = y
             position = (triplets[0, :] == x).nonzero().item()
         else:
             triplets[1, :] = entities

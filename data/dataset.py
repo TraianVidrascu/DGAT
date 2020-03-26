@@ -99,11 +99,11 @@ class FB15Dataset(Dataset):
         self.k = 237
         self.size_x = 100
         self.size_g = 100
+        self.name = 'FB15K-237'
 
     def read_entities(self):
         mapper = self._read_map('entity2id.txt')
         x = self._read_features('entity2vec.txt')
-
 
         torch.save(x, self.processed_dir + 'features.pt')
         with open(self.processed_dir + 'node_map.pickle', 'wb') as handler:
@@ -113,7 +113,6 @@ class FB15Dataset(Dataset):
     def read_relations(self):
         mapper = self._read_map('relation2id.txt')
         x = self._read_features('relation2vec.txt')
-
 
         torch.save(x, self.processed_dir + 'relations.pt')
         with open(self.processed_dir + 'rel_map.pickle', 'wb') as handler:

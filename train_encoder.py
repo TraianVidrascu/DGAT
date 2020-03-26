@@ -28,7 +28,7 @@ def get_encoder(args, x_size, g_size):
     return model
 
 
-def train_encoder(args, data_loader):
+def train_encoder(args, model, data_loader):
     # system parameters
     dev = args.device
     eval = args.eval
@@ -36,15 +36,10 @@ def train_encoder(args, data_loader):
     lr = args.lr
     decay = args.decay
     epochs = args.epochs
+    dataset_name = data_loader.get_name()
 
     # load data
     x, g, graph = data_loader.load_train(dev)
-
-    # determine input size
-    x_size = x.shape[1]
-    g_size = g.shape[1]
-
-    model = get_encoder(args, x_size, g_size)
 
     wandb.watch(model, log="all")
 
@@ -75,17 +70,11 @@ def train_encoder(args, data_loader):
         save_best(model, loss.item(), epoch + 1, ENCODER_FILE, asc=False)
 
         if (epoch + 1) % eval == 0:
-            ranks = evaluate_encoder(h_prime, g_prime, data_loader, 'valid', model._dissimilarity, dev=dev)
-
-            mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranks)
-            wandb.log({'Valid_MR_encoder': mr,
-                       'Valid_MRR_encoder': mrr,
-                       'Valid_Hits@1_encoder': hits_1,
-                       'Valid_Hits@3_encoder': hits_3,
-                       'Valid_Hits@10_encoder': hits_10,
-                       'Train_Loss_encoder': loss})
+            metrics = get_encoder_metrics(h_prime, g_prime, data_loader, 'valid', model, dev=args.device)
+            metrics['train_' + dataset_name + '_Loss_encoder'] = loss
+            wandb.log(metrics)
         else:
-            wandb.log({'Train_Loss_encoder': loss})
+            wandb.log({'train_' + dataset_name + '_Loss_encoder': loss})
 
         del neg_edge_idx, h_prime, g_prime, loss
         torch.cuda.empty_cache()
@@ -118,6 +107,20 @@ def evaluate_encoder(h, g, dataloader, fold, score_fct, dev='cpu'):
         ranks_head = np.array(ranks_head)
 
         return ranks_head
+
+
+def get_encoder_metrics(h, g, data_loader, fold, encoder, dev='cpu'):
+    ranks = evaluate_encoder(h, g, data_loader, fold, encoder._dissimilarity, dev=dev)
+    mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranks)
+
+    dataset = data_loader.get_name()
+
+    metrics = {fold + '_' + dataset + '_MR_encoder': mr,
+               fold + '_' + dataset + '_MRR_encoder': mrr,
+               fold + '_' + dataset + '_Hits@1_encoder': hits_1,
+               fold + '_' + dataset + '_Hits@3_encoder': hits_3,
+               fold + '_' + dataset + '_Hits@10_encoder': hits_10}
+    return metrics
 
 
 def embed_nodes(args, data):
@@ -158,7 +161,8 @@ def main():
     parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
-    parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
+    parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
+    parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
@@ -177,20 +181,28 @@ def main():
     dataset = FB15Dataset()
     data_loader = DataLoader(dataset)
 
-    train_encoder(args, data_loader)
+    # load model
+    x_size = dataset.size_x
+    g_size = dataset.size_g
+    model = get_encoder(args, x_size, g_size)
+
+    # initial evaluation for test and valid folds
+    x, g, _ = data_loader.load('valid')  # fold does not matter as we are only interested in initial embedding
+    metrics = get_encoder_metrics(x, g, data_loader, 'test', model, dev=args.device)
+    wandb.log(metrics)
+    metrics = get_encoder_metrics(x, g, data_loader, 'valid', model, dev=args.device)
+    wandb.log(metrics)
+
+    # train model and save embeddings
+    train_encoder(args, model, data_loader)
     h, g = embed_nodes(args, dataset)
     dataset.save_embedding(h, g)
 
-    encoder = load_encoder(args, x_size=dataset.size_x, g_size=dataset.size_g)
-    ranks = evaluate_encoder(h, g, data_loader, 'test', encoder._dissimilarity, dev=args.device)
-
-    mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranks)
-
-    wandb.log({'Test_MR_encoder': mr,
-               'Test_MRR_encoder': mrr,
-               'Test_Hits@1_encoder': hits_1,
-               'Test_Hits@3_encoder': hits_3,
-               'Test_Hits@10_encoder': hits_10})
+    # evaluate test and valid fold after training
+    metrics = get_encoder_metrics(h, g, data_loader, 'valid', model, dev=args.device)
+    wandb.log(metrics)
+    metrics = get_encoder_metrics(h, g, data_loader, 'test', model, dev=args.device)
+    wandb.log(metrics)
 
 
 if __name__ == "__main__":

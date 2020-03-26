@@ -40,3 +40,4 @@ def get_metrics(ranks):
     hits_10 = hits_at(ranks, 10)
 
     return mr, mrr, hits_1, hits_3, hits_10
+
