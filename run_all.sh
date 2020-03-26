@@ -11,5 +11,5 @@
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
 
 conda activate dgat
-python encoder.py
+python train_encoder.py
 python train_decoder.py
