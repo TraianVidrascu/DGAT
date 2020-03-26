@@ -77,10 +77,12 @@ def train_encoder(args, data_loader):
         if (epoch + 1) % eval == 0:
             ranks = evaluate_encoder(h_prime, g_prime, data_loader, 'valid', model._dissimilarity, dev=dev)
 
-            mr, mrr, hits = get_metrics(ranks)
+            mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranks)
             wandb.log({'Valid_MR_encoder': mr,
                        'Valid_MRR_encoder': mrr,
-                       'Valid_Hits@10_encoder': hits,
+                       'Valid_Hits@1_encoder': hits_1,
+                       'Valid_Hits@3_encoder': hits_3,
+                       'Valid_Hits@10_encoder': hits_10,
                        'Train_Loss_encoder': loss})
         else:
             wandb.log({'Train_Loss_encoder': loss})
@@ -182,11 +184,13 @@ def main():
     encoder = load_encoder(args, x_size=dataset.size_x, g_size=dataset.size_g)
     ranks = evaluate_encoder(h, g, data_loader, 'test', encoder._dissimilarity, dev=args.device)
 
-    mr, mrr, hits = get_metrics(ranks)
+    mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranks)
 
     wandb.log({'Test_MR_encoder': mr,
                'Test_MRR_encoder': mrr,
-               'Test_Hits@10_encoder': hits})
+               'Test_Hits@1_encoder': hits_1,
+               'Test_Hits@3_encoder': hits_3,
+               'Test_Hits@10_encoder': hits_10})
 
 
 if __name__ == "__main__":

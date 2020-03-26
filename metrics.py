@@ -35,5 +35,8 @@ def hits_at(ranks, n=1):
 def get_metrics(ranks):
     mr = mean_rank(ranks)
     mrr = mean_reciprocal_rank(ranks)
-    hits = hits_at(ranks, 10)
-    return mr, mrr, hits
+    hits_1 = hits_at(ranks, 1)
+    hits_3 = hits_at(ranks, 3)
+    hits_10 = hits_at(ranks, 10)
+
+    return mr, mrr, hits_1, hits_3, hits_10

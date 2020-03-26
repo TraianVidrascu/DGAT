@@ -83,10 +83,12 @@ def train_decoder(args, data_loader):
         if (epoch + 1) % eval == 0:
             ranks = evaluate_decoder(decoder, data_loader, 'valid', dev=args.device)
 
-            mr, mrr, hits = get_metrics(ranks)
+            mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranks)
             wandb.log({'Valid_MR_decoder': mr,
                        'Valid_MRR_decoder': mrr,
-                       'Valid_Hits@10_decoder': hits,
+                       'Valid_Hits@1_decoder': hits_1,
+                       'Valid_Hits@3_decoder': hits_3,
+                       'Valid_Hits@10_decoder': hits_10,
                        'Train_Loss_decoder': loss_epoch})
         else:
             wandb.log({'Train_Loss_decoder': loss_epoch})
@@ -163,11 +165,13 @@ def main():
     decoder = load_decoder(args)
     ranks = evaluate_decoder(decoder, data_loader, 'test', dev=args.device)
 
-    mr, mrr, hits = get_metrics(ranks)
+    mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranks)
 
     wandb.log({'Test_MR_decoder': mr,
                'Test_MRR_decoder': mrr,
-               'Test_Hits@10_decoder': hits})
+               'Test_Hits@1_decoder': hits_1,
+               'Test_Hits@3_decoder': hits_3,
+               'Test_Hits@10_decoder': hits_10})
 
 
 if __name__ == "__main__":
