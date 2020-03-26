@@ -155,7 +155,7 @@ def main():
     parser.add_argument("--eval", type=int, default=100, help="After how many epochs to evaluate.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=300, help="Number of training epochs for encoder.")
+    parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
