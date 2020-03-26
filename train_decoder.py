@@ -24,7 +24,9 @@ def get_decoder(args):
     return model
 
 
-def train_decoder(args, data_loader):
+def train_decoder(args, decoder, data_loader):
+    wandb.watch(decoder, log="all")
+
     dev = args.device
     lr = args.lr
     decay = args.decay
@@ -34,9 +36,6 @@ def train_decoder(args, data_loader):
 
     _, _, graph = data_loader.load_train(dev)
     h, g = data_loader.load_embedding(dev)
-
-    decoder = get_decoder(args)
-    wandb.watch(decoder, log="all")
 
     first = 0
     # if args.checkpoint:
@@ -129,6 +128,22 @@ def evaluate_decoder(model, dataloader, fold, dev='cpu'):
         return ranks_head
 
 
+def get_decoder_metrics(decoder, data_loader, fold, dev='cpu'):
+    ranks = evaluate_decoder(decoder, data_loader, fold, dev=dev)
+
+    mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranks)
+
+    dataset = data_loader.get_name()
+
+    metrics = {fold + '_' + dataset + '_MR_decoder': mr,
+               fold + '_' + dataset + '_MRR_decoder': mrr,
+               fold + '_' + dataset + '_Hits@1_decoder': hits_1,
+               fold + '_' + dataset + '_Hits@3_decoder': hits_3,
+               fold + '_' + dataset + '_Hits@10_decoder': hits_10}
+
+    return metrics
+
+
 def main():
     set_random_seed()
     torch.autograd.set_detect_anomaly(True)
@@ -143,7 +158,8 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay decoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
-    parser.add_argument("--batch_size", type=int, default=64000, help="Batch size for decoder.")
+    parser.add_argument("--batch_size", type=int, default=32000, help="Batch size for decoder.")
+    parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
@@ -157,21 +173,27 @@ def main():
     # set up weights adn biases
     wandb.init(project="KBAT_decoder", config=args)
 
+    # load dataset
     dataset = FB15Dataset()
     data_loader = DataLoader(dataset)
 
-    train_decoder(args, data_loader)
+    # load model architecture
+    decoder = get_decoder(args)
 
-    decoder = load_decoder(args)
-    ranks = evaluate_decoder(decoder, data_loader, 'test', dev=args.device)
+    # evaluate test and valid before training
+    metrics = get_decoder_metrics(decoder, data_loader, 'test', dev=args.device)
+    wandb.log(metrics)
+    metrics = get_decoder_metrics(decoder, data_loader, 'valid', dev=args.device)
+    wandb.log(metrics)
 
-    mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranks)
+    # train decoder model
+    train_decoder(args, decoder, data_loader)
 
-    wandb.log({'Test_MR_decoder': mr,
-               'Test_MRR_decoder': mrr,
-               'Test_Hits@1_decoder': hits_1,
-               'Test_Hits@3_decoder': hits_3,
-               'Test_Hits@10_decoder': hits_10})
+    # Evaluate test and valid fold after training is done
+    metrics = get_decoder_metrics(decoder, data_loader, 'test', dev=args.device)
+    wandb.log(metrics)
+    metrics = get_decoder_metrics(decoder, data_loader, 'valid', dev=args.device)
+    wandb.log(metrics)
 
 
 if __name__ == "__main__":

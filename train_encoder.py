@@ -181,7 +181,7 @@ def main():
     dataset = FB15Dataset()
     data_loader = DataLoader(dataset)
 
-    # load model
+    # load model architecture
     x_size = dataset.size_x
     g_size = dataset.size_g
     model = get_encoder(args, x_size, g_size)
