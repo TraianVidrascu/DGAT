@@ -12,4 +12,4 @@
 
 conda activate dgat
 python train_encoder.py
-python train_decoder.py
+python train_decoder.py  --batch_size 64000
