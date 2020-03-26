@@ -78,7 +78,7 @@ class Dataset:
         graph = self.load_graph(fold)
         return x, g, graph
 
-    def load_embedding(self, dev):
+    def load_embedding(self, dev='cpu'):
         path_h = osp.join(self.processed_dir, 'h.pt')
         path_g = osp.join(self.processed_dir, 'g.pt')
         h = torch.load(path_h).to(dev)
