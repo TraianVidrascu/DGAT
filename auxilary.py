@@ -4,7 +4,6 @@ import os.path as osp
 from data.dataset import FB15Dataset
 from dataloader import DataLoader
 from model import KBNet
-from train import get_encoder
 
 
 def save_embeddings(run_dir, dataset):

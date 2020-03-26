@@ -31,3 +31,9 @@ def load_model(model, file):
         model.load_state_dict(model_dict['model_state_dict'])
         epoch = model_dict['epoch']
     return model, epoch
+
+def set_random_seed():
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(42)
+    torch.manual_seed(42)
+

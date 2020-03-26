@@ -97,6 +97,8 @@ class FB15Dataset(Dataset):
         super().__init__('./data/FB15k-237/raw/', './data/FB15k-237/processed/')
         self.n = 14541
         self.k = 237
+        self.size_x = 100
+        self.size_g = 100
 
     def read_entities(self):
         mapper = self._read_map('entity2id.txt')
