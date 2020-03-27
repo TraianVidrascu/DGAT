@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import wandb
 
-from data.dataset import FB15Dataset
+from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
 from metrics import get_metrics, rank_triplet
 from model import KBNet
@@ -227,10 +227,13 @@ def main():
 
     args, cmdline_args = parser.parse_known_args()
 
-    # set up weights adn biases
+    # set up weights and biases
     wandb.init(project="KBAT_encoder", config=args)
 
-    dataset = FB15Dataset()
+    if args.dataset == 'FB15k-237':
+        dataset = FB15Dataset()
+    else:
+        dataset = WN18RR()
     data_loader = DataLoader(dataset)
 
     # load model architecture
