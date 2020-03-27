@@ -94,16 +94,6 @@ class Dataset:
         wandb.save(path_h)
         wandb.save(path_g)
 
-
-class FB15Dataset(Dataset):
-    def __init__(self):
-        super().__init__('./data/FB15k-237/raw/', './data/FB15k-237/processed/')
-        self.n = 14541
-        self.k = 237
-        self.size_x = 100
-        self.size_g = 100
-        self.name = 'FB15K-237'
-
     def read_entities(self):
         mapper = self._read_map('entity2id.txt')
         x = self._read_features('entity2vec.txt')
@@ -137,3 +127,23 @@ class FB15Dataset(Dataset):
         x, node_mapper = self.read_entities()
         g, rel_mapper = self.read_relations()
         self.read_edges(node_mapper, rel_mapper)
+
+
+class FB15Dataset(Dataset):
+    def __init__(self):
+        super().__init__('./data/FB15k-237/raw/', './data/FB15k-237/processed/')
+        self.n = 14541
+        self.k = 237
+        self.size_x = 100
+        self.size_g = 100
+        self.name = 'FB15K-237'
+
+
+class WN18RR(Dataset):
+    def __init__(self):
+        super().__init__('./data/WN18RR/raw/', './data/WN18RR/processed/')
+        self.n = 40943
+        self.k = 11
+        self.size_x = 50
+        self.size_g = 50
+        self.name = 'WN18RR'

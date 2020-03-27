@@ -11,4 +11,6 @@
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
 
 conda activate dgat
-python train_encoder.py
+python train_encoder.py  --dataset FB15k-237
+python train_encoder.py  --dataset WN18RR
+
