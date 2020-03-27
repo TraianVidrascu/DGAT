@@ -30,6 +30,7 @@ def train_decoder(args, decoder, data_loader):
     dataset_name = data_loader.get_name()
 
     dev = args.device
+    negative_ratio = args.negative_ratio
     lr = args.lr
     decay = args.decay
     epochs = args.epochs
@@ -45,18 +46,24 @@ def train_decoder(args, decoder, data_loader):
 
     optim = torch.optim.Adam(decoder.parameters(), lr=lr, weight_decay=decay)
 
-    pos_edge_idx, edge_type = data_loader.graph2idx(graph, dev)
+    pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, dev)
     m = pos_edge_idx.shape[1]
     n = h.shape[0]
-    total_size = m * 2
-    edge_type_all = torch.cat([edge_type, edge_type])
 
     for epoch in range(first, epochs):
         decoder.train()
-        neg_edge_idx = data_loader.negative_samples(n, pos_edge_idx, dev)
+        neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio, dev)
 
-        target = torch.cat([torch.ones(m), -torch.ones(m)]).to(dev)
+        m_neg = neg_edge_idx.shape[1]
+
+        # input and target ( positive and negative samples
+        target = torch.cat([torch.ones(m), -torch.ones(m_neg)]).to(dev)
         edge_idx = torch.cat([pos_edge_idx, neg_edge_idx], dim=1)
+        edge_type = torch.cat([pos_edge_type, neg_edge_type])
+
+        # shuffle pos and negative samples
+        edge_idx, edge_type = data_loader.shuffle_samples(edge_idx, edge_type)
+        total_size = edge_idx.shape[1]
 
         iteration = torch.randperm(total_size).to(dev)
         loss_epoch = 0
@@ -64,7 +71,7 @@ def train_decoder(args, decoder, data_loader):
             batch = iteration[itt:itt + batch_size]
 
             batch_idx = edge_idx[:, batch]
-            batch_type = edge_type_all[batch]
+            batch_type = edge_type[batch]
             batch_target = target[batch]
 
             prediction = decoder(h, g, batch_idx, batch_type)
@@ -152,11 +159,12 @@ def main():
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=200, help="Number of training epochs for decoder.")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate.")
+    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay decoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
     parser.add_argument("--batch_size", type=int, default=32000, help="Batch size for decoder.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
+    parser.add_argument("--negative-ratio", type=int, default=50, help="Number of negative samples.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")

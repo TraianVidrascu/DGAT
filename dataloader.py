@@ -76,25 +76,41 @@ class DataLoader:
             position = (triplets[1, :] == y).nonzero().item()
         return triplets, position
 
-    def negative_samples(self, n, edge_idx, dev='cpu'):
-        row, col = edge_idx
+    def shuffle_samples(self, edge_idx, edge_type):
+        m = edge_idx.shape[1]
+        samples = torch.stack([edge_idx[0, :], edge_idx[1, :], edge_type], dim=0)
+
+        perm = torch.randperm(m)
+        samples = samples[:, perm]
+
+        edge_idx = samples[0:2, :]
+        edge_type = samples[2, :]
+
+        return edge_idx, edge_type
+
+    def negative_samples(self, n, edge_idx, edge_type, negative_ratio, dev='cpu'):
+        ratio = int(negative_ratio / 2)
+
+        edge_idx_aux = edge_idx.repeat((1, ratio))
+        row, col = edge_idx_aux
+        m = row.shape[0]
+
+        edge_type_aux = edge_type.repeat(ratio)
 
         # corrupt head triplet
-        head_corrupted = torch.randint_like(row, high=n)
+        head_corrupted = torch.randint(size=(m,), high=n).to(dev)
         head_corrupted[row == head_corrupted] = (head_corrupted[row == head_corrupted] + 1) % n
+        head_corrupted_idx_type = torch.stack([head_corrupted, col, edge_type_aux])
 
         # corrupt tail triplet
-        tail_corrupted = torch.randint_like(col, high=n)
+        tail_corrupted = torch.randint(size=(m,), high=n).to(dev)
         tail_corrupted[col == tail_corrupted] = (tail_corrupted[col == tail_corrupted] + 1) % n
+        tail_corrupted_idx_type = torch.stack([row, tail_corrupted, edge_type_aux])
 
-        # uniform sample between two sets
-        m = edge_idx.shape[1]
-        sampled = torch.rand(m) > 0.5
+        # negative samples
+        neg_idx_type = torch.cat([head_corrupted_idx_type, tail_corrupted_idx_type], dim=1)
 
-        neg_idx = torch.zeros((2, m)).long().to(dev)
-        neg_idx[0, sampled] = head_corrupted[sampled]
-        neg_idx[0, ~sampled] = edge_idx[0, ~sampled]
-        neg_idx[1, ~sampled] = tail_corrupted[~sampled]
-        neg_idx[1, sampled] = edge_idx[1, sampled]
+        neg_idx = neg_idx_type[0:2, :]
+        neg_type = neg_idx_type[2, :]
 
-        return neg_idx
+        return neg_idx, neg_type

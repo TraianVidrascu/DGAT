@@ -188,7 +188,7 @@ class ConvKB(nn.Module):
     def __init__(self, input_size, channels, dropout=0.3, dev='cpu'):
         super(ConvKB, self).__init__()
 
-        self.conv = nn.Conv1d(3, channels, 1)
+        self.conv = nn.Conv2d(1, channels, kernel_size=(3, 1), bias=True)
         self.weight = nn.Linear(input_size * channels, 1)
         self.dropout = nn.Dropout(dropout)
 
@@ -205,9 +205,9 @@ class ConvKB(nn.Module):
     def forward(self, h, g, edge_idx, edge_type):
         row, col = edge_idx
 
-        h = torch.cat([h[row][:, None, :], h[col][:, None, :], g[edge_type][:, None, :]], dim=1)
+        h = torch.cat([h[row][:, None, :], h[col][:, None, :], g[edge_type][:, None, :]], dim=1)[:, None, :, :]
 
-        h = self.conv(h)
+        h = self.conv(h).squeeze()
         h = torch.relu(h)
         h = self.dropout(h)
         h = h.view(-1, self.channels * self.input_size)

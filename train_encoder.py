@@ -123,18 +123,12 @@ def get_encoder_metrics(h, g, data_loader, fold, encoder, dev='cpu'):
     return metrics
 
 
-def embed_nodes(args, data):
+def embed_nodes(args, encoder, data):
     dev = args.device
 
     data_loader = DataLoader(data)
     x, g, graph = data_loader.load_train(dev)
     edge_idx, edge_type = data_loader.graph2idx(graph, dev)
-
-    # determine input size
-    x_size = x.shape[1]
-    g_size = g.shape[1]
-
-    encoder = load_encoder(args, g_size, x_size)
 
     encoder.eval()
     with torch.no_grad():
@@ -195,7 +189,7 @@ def main():
 
     # train model and save embeddings
     train_encoder(args, model, data_loader)
-    h, g = embed_nodes(args, dataset)
+    h, g = embed_nodes(args, model, dataset)
     dataset.save_embedding(h, g)
 
     # evaluate test and valid fold after training

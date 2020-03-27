@@ -223,20 +223,25 @@ import torch
 from data.dataset import FB15Dataset
 from dataloader import DataLoader
 
-dataset = FB15Dataset()
-ldr = DataLoader(dataset)
-n, k = ldr.get_properties()
-triplet = torch.tensor([[1], [2]]).long()
-print(triplet)
-print(triplet.shape)
-triplets, position = ldr.corrupt_triplet(n, triplet)
+# dataset = FB15Dataset()
+# ldr = DataLoader(dataset)
+# n, k = ldr.get_properties()
+# triplet = torch.tensor([[1], [2]]).long()
+# print(triplet)
+# print(triplet.shape)
+# triplets, position = ldr.corrupt_triplet(n, triplet)
+#
+# print(triplets)
+# print(triplets.shape)
+# print(triplets[:, position])
+#
+# triplets, position = ldr.corrupt_triplet(n, triplet,head=False)
+#
+# print(triplets)
+# print(triplets.shape)
+# print(triplets[:, position])
 
-print(triplets)
-print(triplets.shape)
-print(triplets[:, position])
-
-triplets, position = ldr.corrupt_triplet(n, triplet,head=False)
-
-print(triplets)
-print(triplets.shape)
-print(triplets[:, position])
+row = torch.tensor([1,2,3,4])
+print(row)
+m = row.shape[0]
+print(row.expand(4,2))
