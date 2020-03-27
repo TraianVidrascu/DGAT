@@ -11,4 +11,4 @@
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
 
 conda activate dgat
-python train_decoder.py --batch_size 256000
+python train_decoder.py --batch_size 128000
