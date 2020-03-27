@@ -2,6 +2,7 @@ import torch
 import pickle as pk
 import os.path as osp
 import networkx as nk
+import wandb
 
 
 class Dataset:
@@ -90,6 +91,8 @@ class Dataset:
         path_g = osp.join(self.processed_dir, 'g.pt')
         torch.save(h, path_h)
         torch.save(g, path_g)
+        wandb.save(path_h)
+        wandb.save(path_g)
 
 
 class FB15Dataset(Dataset):
