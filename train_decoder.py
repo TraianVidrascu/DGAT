@@ -164,7 +164,7 @@ def main():
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
     parser.add_argument("--batch_size", type=int, default=32000, help="Batch size for decoder.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
-    parser.add_argument("--negative-ratio", type=int, default=50, help="Number of negative samples.")
+    parser.add_argument("--negative-ratio", type=int, default=40, help="Number of negative samples.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
