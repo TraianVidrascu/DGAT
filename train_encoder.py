@@ -32,7 +32,9 @@ def train_encoder(args, model, data_loader):
     # system parameters
     dev = args.device
     eval = args.eval
+
     # training parameters
+    negative_ratio = 2
     lr = args.lr
     decay = args.decay
     epochs = args.epochs
@@ -48,38 +50,69 @@ def train_encoder(args, model, data_loader):
     #     model, first = load_model(model, ENCODER_CHECKPOINT)
 
     optim = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
+    scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=500, gamma=0.5, last_epoch=-1)
 
-    pos_edge_idx, edge_type = data_loader.graph2idx(graph, dev)
+    pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, dev)
     n = x.shape[0]
 
+    pos_edge_idx_aux = pos_edge_idx.repeat((1, negative_ratio))
+    pos_edge_type_aux = pos_edge_type.repeat(negative_ratio)
+
+    batch_size = pos_edge_idx.shape[1]
     for epoch in range(first, epochs):
         model.train()
 
-        neg_edge_idx = data_loader.negative_samples(n, pos_edge_idx, dev)
+        neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio, dev)
 
-        h_prime, g_prime = model(x, g, pos_edge_idx, edge_type)
+        # shuffling
+        perm = torch.randperm(pos_edge_type_aux.shape[0])
+        pos_edge_idx_aux = pos_edge_idx_aux[:, perm]
+        pos_edge_type_aux = pos_edge_type_aux[perm]
+        neg_edge_idx = neg_edge_idx[:, perm]
+        neg_edge_type = neg_edge_type[perm]
 
-        loss = model.loss(h_prime, g_prime, pos_edge_idx, neg_edge_idx, edge_type)
+        m = pos_edge_idx_aux.shape[1]
+        iterations = torch.randperm(m)
 
-        # optimization
-        optim.zero_grad()
-        loss.backward()
-        optim.step()
+        loss_epoch = 0
+        no_batch = int(m / batch_size)
 
-        # save_model(model, loss.item(), epoch + 1, ENCODER_CHECKPOINT)
-        save_best(model, loss.item(), epoch + 1, ENCODER_FILE, asc=False)
+        for itt in range(0, m, batch_size):
+            batch = iterations[itt:itt + batch_size]
+
+            h_prime, g_prime = model(x, g, pos_edge_idx, pos_edge_type)
+
+            pos_edge_idx_batch = pos_edge_idx_aux[:, batch]
+            pos_edge_type_batch = pos_edge_type_aux[batch]
+            neg_edge_idx_batch = neg_edge_idx[:, batch]
+            neg_edge_type_batch = neg_edge_type[batch]
+
+            loss = model.loss(h_prime, g_prime,
+                              pos_edge_idx_batch,
+                              pos_edge_type_batch,
+                              neg_edge_idx_batch,
+                              neg_edge_type_batch)
+
+            # optimization
+            optim.zero_grad()
+            loss.backward()
+            optim.step()
+
+            loss_epoch += loss.item() / no_batch
+        scheduler.step()
+        save_best(model, loss_epoch, epoch + 1, ENCODER_FILE, asc=False)
 
         if (epoch + 1) % eval == 0:
             metrics = get_encoder_metrics(h_prime, g_prime, data_loader, 'valid', model, dev=args.device)
-            metrics['train_' + dataset_name + '_Loss_encoder'] = loss
+            metrics['train_' + dataset_name + '_Loss_encoder'] = loss_epoch
             wandb.log(metrics)
         else:
-            wandb.log({'train_' + dataset_name + '_Loss_encoder': loss})
+            wandb.log({'train_' + dataset_name + '_Loss_encoder': loss_epoch})
 
         del neg_edge_idx, h_prime, g_prime, loss
         torch.cuda.empty_cache()
 
-    del pos_edge_idx, edge_type, x, g, graph, model
+    del pos_edge_idx, pos_edge_type, x, g, graph, model
     torch.cuda.empty_cache()
 
 
@@ -91,35 +124,60 @@ def evaluate_encoder(h, g, dataloader, fold, score_fct, dev='cpu'):
         m = edge_idx.shape[1]
 
         ranks_head = []
+        ranks_tail = []
+        ranks = []
 
         for i in range(m):
             triplet_idx = edge_idx[:, i]
             triplet_type = edge_type[i]
 
-            triplets_head, position_head = dataloader.corrupt_triplet(n, triplet_idx)
+            # evaluate for corrupted tail triplets
+            triplets_tail, position_tail = dataloader.corrupt_triplet(n, triplet_idx, head=False)
+            triplets_tail_type = torch.zeros(triplets_tail.shape[1]).long()
+            triplets_tail_type[:] = triplet_type
+            scores_tail = score_fct(h, g, triplets_tail, triplets_tail_type).cpu().numpy()
 
+            rank_tail = rank_triplet(scores_tail, position_tail)
+            ranks_tail.append(rank_tail)
+            ranks.append(rank_tail)
+
+            triplets_head, position_head = dataloader.corrupt_triplet(n, triplet_idx)
             triplets_head_type = torch.zeros(triplets_head.shape[1]).long()
             triplets_head_type[:] = triplet_type
             scores_head = score_fct(h, g, triplets_head, triplets_head_type).cpu().numpy()
 
             rank_head = rank_triplet(scores_head, position_head)
             ranks_head.append(rank_head)
-        ranks_head = np.array(ranks_head)
+            ranks.append(rank_head)
 
-        return ranks_head
+        ranks_head = np.array(ranks_head)
+        ranks_tail = np.array(ranks_tail)
+        ranks = np.array(ranks)
+
+        return ranks_head, ranks_tail, ranks
+
+
+def get_ranking_metric(ranking_name, ranking, dataset_name, fold):
+    mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranking)
+
+    metrics = {fold + '_' + dataset_name + '_' + ranking_name + '_MR_encoder': mr,
+               fold + '_' + dataset_name + '_' + ranking_name + '_MRR_encoder': mrr,
+               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@1_encoder': hits_1,
+               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@3_encoder': hits_3,
+               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@10_encoder': hits_10}
+    return metrics
 
 
 def get_encoder_metrics(h, g, data_loader, fold, encoder, dev='cpu'):
-    ranks = evaluate_encoder(h, g, data_loader, fold, encoder._dissimilarity, dev=dev)
-    mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranks)
+    ranks_head, ranks_tail, ranks = evaluate_encoder(h, g, data_loader, fold, encoder._dissimilarity, dev=dev)
 
-    dataset = data_loader.get_name()
+    dataset_name = data_loader.get_name()
 
-    metrics = {fold + '_' + dataset + '_MR_encoder': mr,
-               fold + '_' + dataset + '_MRR_encoder': mrr,
-               fold + '_' + dataset + '_Hits@1_encoder': hits_1,
-               fold + '_' + dataset + '_Hits@3_encoder': hits_3,
-               fold + '_' + dataset + '_Hits@10_encoder': hits_10}
+    metrics_head = get_ranking_metric('head', ranks_head, dataset_name, fold)
+    metrics_tail = get_ranking_metric('tail', ranks_tail, dataset_name, fold)
+    metrics_all = get_ranking_metric('both', ranks, dataset_name, fold)
+
+    metrics = {**metrics_head, **metrics_tail, **metrics_all}
     return metrics
 
 
@@ -153,7 +211,7 @@ def main():
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate.")
+    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
@@ -179,13 +237,6 @@ def main():
     x_size = dataset.size_x
     g_size = dataset.size_g
     model = get_encoder(args, x_size, g_size)
-
-    # initial evaluation for test and valid folds
-    x, g, _ = data_loader.load('valid')  # fold does not matter as we are only interested in initial embedding
-    metrics = get_encoder_metrics(x, g, data_loader, 'test', model, dev=args.device)
-    wandb.log(metrics)
-    metrics = get_encoder_metrics(x, g, data_loader, 'valid', model, dev=args.device)
-    wandb.log(metrics)
 
     # train model and save embeddings
     train_encoder(args, model, data_loader)

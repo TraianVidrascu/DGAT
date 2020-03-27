@@ -17,7 +17,7 @@ class RelationalAttentionLayer(nn.Module):
         self.att_softmax = nn.Softmax()
 
         # relation layer
-        self.weights_rel = nn.Linear(in_size_g, out_size)
+        self.weights_rel = nn.Linear(in_size_g, heads * out_size)
         # entity embedding
         self.weights_ent = nn.Linear(initial_size, out_size)
 
@@ -149,8 +149,8 @@ class KBNet(nn.Module):
     def __init__(self, in_size_h, in_size_g, hidden_size, output_size, heads, margin=1, device='cpu'):
         super(KBNet, self).__init__()
         self.input_layer = RelationalAttentionLayer(in_size_h, in_size_h, in_size_g, hidden_size, heads, device=device)
-        self.output_layer = RelationalAttentionLayer(in_size_h, heads * hidden_size, hidden_size, output_size,
-                                                     heads=heads, concat=False, device=device)
+        self.output_layer = RelationalAttentionLayer(in_size_h, heads * hidden_size, heads * hidden_size, output_size,
+                                                     heads=heads, device=device)
 
         self.loss_fct = nn.MarginRankingLoss(margin=margin)
 
@@ -159,23 +159,17 @@ class KBNet(nn.Module):
 
     def _dissimilarity(self, h, g, edge_idx, edge_type):
         row, col = edge_idx
-
-        h_i = h[row]
-        h_j = h[col]
-        g_k = g[edge_type]
-
-        d = h_i + g_k - h_j
-
-        d_norm = torch.norm(d, p=1, dim=1)
+        d_norm = torch.norm(h[row] + g[edge_type] - h[col], p=1, dim=1)
         return d_norm
 
-    def loss(self, h_prime, g_prime, pos_edge_idx, neg_edge_pos, edge_type):
+    def loss(self, h_prime, g_prime, pos_edge_idx, pos_edge_type, neg_edge_idx, neg_edge_type):
         # Margin loss
-        d_pos = self._dissimilarity(h_prime, g_prime, pos_edge_idx, edge_type)
-        d_neg = self._dissimilarity(h_prime, g_prime, neg_edge_pos, edge_type)
+        d_pos = self._dissimilarity(h_prime, g_prime, pos_edge_idx, pos_edge_type)
+        d_neg = self._dissimilarity(h_prime, g_prime, neg_edge_idx, neg_edge_type)
         y = torch.ones(d_pos.shape[0]).to(d_pos.device)
         loss = self.loss_fct(d_pos, d_neg, y)
         return loss
+
 
     def forward(self, x, g, edge_idx, edge_type):
         h_prime, g_prime = self.input_layer(x, x, g, edge_idx, edge_type)
