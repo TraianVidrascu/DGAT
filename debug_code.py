@@ -1,19 +1,19 @@
-# import time
+import time
 # import torch
 
 # from torch_scatter import scatter_add
 # import torch_sparse
-#
-# from data.dataset import FB15Dataset
+
+# from data.dataset import WN18RR
 # from dataloader import DataLoader
 #
 # t = time.time()
-# dataset_a = FB15Dataset()
+# dataset_a = WN18RR()
 # s = time.time()
 # print('Initialize Dataset:' + str(s - t))
 # #
 # t = time.time()
-# #dataset_a.pre_process()
+# dataset_a.pre_process()
 # s = time.time()
 # print('Process Dataset:' + str(s - t))
 #
@@ -26,7 +26,10 @@
 # x_a, g_a, graph_a = ldr.load_train()
 # s = time.time()
 # print('Load Train Fold:' + str(s - t))
+# print(len(graph_a.edges()))
 #
+# print(x_a.shape)
+# print(g_a.shape)
 # t = time.time()
 # graph_reduced_a, edge_idx_unseen_a, edge_lbl_unseen_a = ldr.split_unseen(graph_a)
 # s = time.time()
@@ -240,8 +243,3 @@ from dataloader import DataLoader
 # print(triplets)
 # print(triplets.shape)
 # print(triplets[:, position])
-
-row = torch.tensor([1,2,3,4])
-print(row)
-m = row.shape[0]
-print(row.expand(4,2))

@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import wandb
 
-from data.dataset import FB15Dataset
+from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
 from metrics import rank_triplet, get_metrics
 from model import ConvKB
@@ -45,6 +45,7 @@ def train_decoder(args, decoder, data_loader):
     #     decoder, first = load_model(decoder, DECODER_CHECKPOINT)
 
     optim = torch.optim.Adam(decoder.parameters(), lr=lr, weight_decay=decay)
+    scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=25, gamma=0.5, last_epoch=-1)
 
     pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, dev)
     m = pos_edge_idx.shape[1]
@@ -67,6 +68,7 @@ def train_decoder(args, decoder, data_loader):
 
         iteration = torch.randperm(total_size).to(dev)
         loss_epoch = 0
+        no_batch = total_size / batch_size
         for itt in range(0, total_size, batch_size):
             batch = iteration[itt:itt + batch_size]
 
@@ -82,9 +84,10 @@ def train_decoder(args, decoder, data_loader):
             optim.zero_grad()
             loss.backward()
             optim.step()
-            loss_epoch += loss.item()
+            loss_epoch += loss.item() / no_batch
 
-        loss_epoch /= (total_size / batch_size)
+        scheduler.step()
+
         # save_model(decoder, loss_epoch, epoch + 1, DECODER_CHECKPOINT)
         save_best(decoder, loss_epoch, epoch + 1, DECODER_FILE, asc=False)
 
@@ -113,38 +116,59 @@ def evaluate_decoder(model, dataloader, fold, dev='cpu'):
 
         m = edge_idx_test.shape[1]
         ranks_head = []
-
+        ranks_tail = []
+        ranks = []
         for i in range(m):
             triplet_idx = edge_idx_test[:, i]
             triplet_type = edge_type_test[i]
 
-            triplets_head, position_head = dataloader.corrupt_triplet(n, triplet_idx)
-            # triplets_tail, position_tail = dataloader.corrupt_triplet(n, triplet,head=False)
+            # evaluate for corrupted tail triplets
+            triplets_tail, position_tail = dataloader.corrupt_triplet(n, triplet_idx, head=False)
+            triplets_tail_type = torch.zeros(triplets_tail.shape[1]).long()
+            triplets_tail_type[:] = triplet_type
+            scores_tail = model(h, g, triplets_tail, triplets_tail_type).cpu().numpy()
 
+            rank_tail = rank_triplet(scores_tail, position_tail)
+            ranks_tail.append(rank_tail)
+            ranks.append(rank_tail)
+
+            triplets_head, position_head = dataloader.corrupt_triplet(n, triplet_idx)
             triplets_head_type = torch.zeros(triplets_head.shape[1]).long()
             triplets_head_type[:] = triplet_type
             scores_head = model(h, g, triplets_head, triplets_head_type).cpu().numpy()
 
             rank_head = rank_triplet(scores_head, position_head)
             ranks_head.append(rank_head)
-        ranks_head = np.array(ranks_head)
+            ranks.append(rank_head)
 
-        return ranks_head
+        ranks_head = np.array(ranks_head)
+        ranks_tail = np.array(ranks_tail)
+        ranks = np.array(ranks)
+
+        return ranks_head, ranks_tail, ranks
+
+
+def get_ranking_metric(ranking_name, ranking, dataset_name, fold):
+    mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranking)
+
+    metrics = {fold + '_' + dataset_name + '_' + ranking_name + '_MR_decoder': mr,
+               fold + '_' + dataset_name + '_' + ranking_name + '_MRR_decoder': mrr,
+               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@1_decoder': hits_1,
+               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@3_decoder': hits_3,
+               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@10_decoder': hits_10}
+    return metrics
 
 
 def get_decoder_metrics(decoder, data_loader, fold, dev='cpu'):
-    ranks = evaluate_decoder(decoder, data_loader, fold, dev=dev)
+    ranks_head, ranks_tail, ranks = evaluate_decoder(decoder, data_loader, fold, dev=dev)
 
-    mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranks)
+    dataset_name = data_loader.get_name()
 
-    dataset = data_loader.get_name()
+    metrics_head = get_ranking_metric('head', ranks_head, dataset_name, fold)
+    metrics_tail = get_ranking_metric('tail', ranks_tail, dataset_name, fold)
+    metrics_all = get_ranking_metric('both', ranks, dataset_name, fold)
 
-    metrics = {fold + '_' + dataset + '_MR_decoder': mr,
-               fold + '_' + dataset + '_MRR_decoder': mrr,
-               fold + '_' + dataset + '_Hits@1_decoder': hits_1,
-               fold + '_' + dataset + '_Hits@3_decoder': hits_3,
-               fold + '_' + dataset + '_Hits@10_decoder': hits_10}
-
+    metrics = {**metrics_head, **metrics_tail, **metrics_all}
     return metrics
 
 
@@ -158,13 +182,13 @@ def main():
     parser.add_argument("--eval", type=int, default=10, help="After how many epochs to evaluate.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=200, help="Number of training epochs for decoder.")
+    parser.add_argument("--epochs", type=int, default=400, help="Number of training epochs for decoder.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay decoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
-    parser.add_argument("--batch_size", type=int, default=32000, help="Batch size for decoder.")
-    parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
+    parser.add_argument("--batch_size", type=int, default=28000, help="Batch size for decoder.")
     parser.add_argument("--negative-ratio", type=int, default=40, help="Number of negative samples.")
+    parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
@@ -179,17 +203,14 @@ def main():
     wandb.init(project="KBAT_decoder", config=args)
 
     # load dataset
-    dataset = FB15Dataset()
+    if args.dataset == 'FB15k-237':
+        dataset = FB15Dataset()
+    else:
+        dataset = WN18RR()
     data_loader = DataLoader(dataset)
 
     # load model architecture
     decoder = get_decoder(args)
-
-    # evaluate test and valid before training
-    metrics = get_decoder_metrics(decoder, data_loader, 'test', dev=args.device)
-    wandb.log(metrics)
-    metrics = get_decoder_metrics(decoder, data_loader, 'valid', dev=args.device)
-    wandb.log(metrics)
 
     # train decoder model
     train_decoder(args, decoder, data_loader)
