@@ -51,7 +51,8 @@ class DataLoader:
     #
     #     return graph_reduced, edge_idx_unseen.to(dev), edge_unseen_type.to(dev)
 
-    def graph2idx(self, graph, dev='cpu'):
+    @staticmethod
+    def graph2idx(graph, dev='cpu'):
         edges = list(map(lambda x: [x[0], x[1], x[2]['label']], graph.edges(data=True)))
 
         edges = torch.tensor(edges).long()
@@ -60,7 +61,8 @@ class DataLoader:
 
         return edge_idx.to(dev), edge_type.to(dev)
 
-    def corrupt_triplet(self, n, triplet, head=True):
+    @staticmethod
+    def corrupt_triplet(n, triplet, head=True):
         # corrupt triplet, raw setting now, corrupt only head or tail
         x, y = triplet
 
@@ -87,6 +89,10 @@ class DataLoader:
         edge_type = samples[2, :]
 
         return edge_idx, edge_type
+
+    def load_evaluation_triplets_raw(self, fold, head=True, dev='cpu'):
+        triplets, lists = self.dataset.load_evaluation_triplets_raw(fold, head, dev)
+        return triplets, lists
 
     def negative_samples(self, n, edge_idx, edge_type, negative_ratio, dev='cpu'):
         ratio = int(negative_ratio / 2)

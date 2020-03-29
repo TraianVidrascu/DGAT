@@ -1,21 +1,22 @@
 import time
 # import torch
-
+#
 # from torch_scatter import scatter_add
 # import torch_sparse
+#
+from data.dataset import FB15Dataset, WN18RR
 
-# from data.dataset import WN18RR
 # from dataloader import DataLoader
 #
-# t = time.time()
-# dataset_a = WN18RR()
-# s = time.time()
-# print('Initialize Dataset:' + str(s - t))
-# #
-# t = time.time()
-# dataset_a.pre_process()
-# s = time.time()
-# print('Process Dataset:' + str(s - t))
+t = time.time()
+dataset_a = WN18RR()
+s = time.time()
+print('Initialize Dataset:' + str(s - t))
+#
+t = time.time()
+dataset_a.pre_process()
+s = time.time()
+print('Process Dataset:' + str(s - t))
 #
 # t = time.time()
 # ldr = DataLoader(dataset_a)
@@ -223,6 +224,7 @@ import time
 
 import torch
 
+import dataloader
 from data.dataset import FB15Dataset
 from dataloader import DataLoader
 
@@ -243,3 +245,35 @@ from dataloader import DataLoader
 # print(triplets)
 # print(triplets.shape)
 # print(triplets[:, position])
+
+# fold = 'valid'
+# dev ='cpu'
+# data = FB15Dataset()
+# ldr = DataLoader(data)
+# x, _, graph = ldr.load_valid()
+# edge_idx, edge_type = ldr.graph2idx(graph, dev)
+# n = x.shape[0]
+# m = edge_idx.shape[1]
+#
+# all_triplets = torch.zeros((m,4,n))
+# for i in range(m):
+#     triplet_idx = edge_idx[:,i]
+#     triplets_tail, position_tail = ldr.corrupt_triplet(n, triplet_idx, head=False)
+#     triplets_tail_type = edge_type[i].expand(n)
+#     triplets_lbl = torch.zeros(n).long()
+#     triplets_lbl[position_tail] = 1
+#     triplets_tail = torch.stack([triplets_tail[0,:],triplets_tail[1,:],triplets_tail_type,triplets_lbl])
+#     all_triplets[i,:,:] = triplets_tail
+#
+# torch.save(all_triplets,'./data/WN18RR/evaluation/tail_triplets_test_raw.pt')
+# print(all_triplets.shape)
+
+# tensor = torch.randn((2,10))
+# my_list = tensor.tolist()
+# print(my_list)
+
+dataset = FB15Dataset()
+
+t, l = dataset.load_evaluation_triplets_raw('valid')
+print(t)
+print(l)
