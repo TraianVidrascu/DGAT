@@ -6,7 +6,7 @@
 #SBATCH --time=9:30:00
 #SBATCH --mem=60000M
 #SBATCH --gres=gpu:1
-#SBATCH -p gpu
+#SBATCH --partition=gpu_shared
 #SBATCH --mail-type=BEGIN,END
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
 

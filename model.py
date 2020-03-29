@@ -5,7 +5,7 @@ from torch_scatter import scatter_add
 
 
 class RelationalAttentionLayer(nn.Module):
-    def __init__(self, initial_size, in_size_h, in_size_g, out_size, heads=2, concat=True, bias=True,
+    def __init__(self, in_size_h, in_size_g, out_size, heads=2, concat=True, bias=True,
                  negative_slope=1e-2, dropout=0.3, device='cpu'):
         super(RelationalAttentionLayer, self).__init__()
         # forward layers
@@ -15,11 +15,6 @@ class RelationalAttentionLayer(nn.Module):
         self.weights_att = nn.Parameter(torch.Tensor(1, heads, out_size))
         self.att_actv = nn.LeakyReLU(negative_slope)
         self.att_softmax = nn.Softmax()
-
-        # relation layer
-        self.weights_rel = nn.Linear(in_size_g, heads * out_size)
-        # entity embedding
-        self.weights_ent = nn.Linear(initial_size, out_size)
 
         # dropout layer
         self.dropout = nn.Dropout(dropout)
@@ -36,11 +31,10 @@ class RelationalAttentionLayer(nn.Module):
         self.self_edge_idx = None
 
         self._init_params()
+        self.to(device)
 
     def _init_params(self):
         nn.init.xavier_normal_(self.weights_att.data, gain=1.414)
-        nn.init.xavier_normal_(self.weights_ent.weight, gain=1.414)
-        nn.init.xavier_normal_(self.weights_rel.weight, gain=1.414)
         nn.init.xavier_normal_(self.fc1.weight, gain=1.414)
 
     @staticmethod
@@ -95,24 +89,6 @@ class RelationalAttentionLayer(nn.Module):
 
         return c_ijk
 
-    def _update_relation(self, g):
-        g_prime = self.weights_rel(g)
-        return g_prime
-
-    def _update_entity(self, x, h):
-        h_prime = self.weights_ent(x)[:, None, :] + h
-        return h_prime
-
-    def _concat(self, h_prime):
-        if self.concat:
-            # ToDo: Check if view reorders correctly
-            h_prime = torch.cat([h_prime[:, i, :] for i in range(self.heads)], dim=1)
-            h_prime = torch.tanh(h_prime)
-        else:
-            h_prime /= self.heads
-            h_prime = torch.sum(h_prime, dim=1).squeeze()
-        return h_prime
-
     def _self_edges_mask(self, n):
         """
         Adds self edges for with 0 values to keep the number nodes consistent per compuation in the case
@@ -136,23 +112,60 @@ class RelationalAttentionLayer(nn.Module):
 
         # aggregate node representation
         h = self._aggregate(edge_idx, alpha, c_ijk)
+        return h
 
-        h_prime = self._update_entity(x, h)
 
-        h_prime = self._concat(h_prime)
+class EntityLayer(nn.Module):
+    def __init__(self, initial_size, layer_size, dev='device'):
+        super(EntityLayer, self).__init__()
+        # entity embedding
+        self.weights_ent = nn.Linear(initial_size, layer_size)
+        self.init_params()
+        self.to(dev)
 
-        g_prime = self._update_relation(g)
-        return h_prime, g_prime
+    def init_params(self):
+        nn.init.xavier_normal_(self.weights_ent.weight, gain=1.414)
+
+    def forward(self, x, h):
+        h_prime = self.weights_ent(x)[:, None, :] + h
+
+        # concat representations
+        h_prime = torch.cat([h_prime[:, i, :] for i in range(self.heads)], dim=1)
+        h_prime = torch.tanh(h_prime)
+
+        return h_prime
+
+
+class RelationLayer(nn.Module):
+    def __init__(self, in_size, out_size, device='cpu'):
+        super(RelationLayer, self).__init__()
+        # relation layer
+        self.weights_rel = nn.Linear(in_size, out_size)
+        self.init_params()
+        self.to(device)
+
+    def init_params(self):
+        nn.init.xavier_normal_(self.weights_ent.weight, gain=1.414)
+
+    def forward(self, g):
+        g_prime = self.weights_rel(g)
+        return g_prime
 
 
 class KBNet(nn.Module):
-    def __init__(self, in_size_h, in_size_g, hidden_size, output_size, heads, margin=1, device='cpu'):
+    def __init__(self, x_size, g_size, hidden_size, output_size, heads, margin=1, device='cpu'):
         super(KBNet, self).__init__()
-        self.input_layer = RelationalAttentionLayer(in_size_h, in_size_h, in_size_g, hidden_size, heads, device=device)
-        self.output_layer = RelationalAttentionLayer(in_size_h, heads * hidden_size, heads * hidden_size, output_size,
-                                                     heads=heads, device=device)
+        self.input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
+        self.output_layer = RelationalAttentionLayer(heads * hidden_size, g_size, output_size, heads, device=device)
+
+        self.relation_layer = RelationLayer(g_size, heads * output_size)
+        self.entity_layer = EntityLayer(x_size, heads * output_size)
 
         self.loss_fct = nn.MarginRankingLoss(margin=margin)
+
+        self.heads = heads
+        self.output_size = output_size
+        self.hidden_size = hidden_size
 
         self.device = device
         self.to(device)
@@ -170,10 +183,18 @@ class KBNet(nn.Module):
         loss = self.loss_fct(d_pos, d_neg, y)
         return loss
 
+    def evaluate(self, h, g, triplets_tail, triplets_tail_type):
+        with torch.no_grad():
+            self.eval()
+            scores = torch.detach(self._dissimilarity(h, g, triplets_tail, triplets_tail_type).cpu()).numpy()
+        return scores
 
     def forward(self, x, g, edge_idx, edge_type):
-        h_prime, g_prime = self.input_layer(x, x, g, edge_idx, edge_type)
-        h_prime, g_prime = self.output_layer(x, h_prime, g_prime, edge_idx, edge_type)
+        h = self.input_layer(x, x, g, edge_idx, edge_type)
+        h = self.output_layer(x, h, g, edge_idx, edge_type)
+
+        g_prime = self.relation_layer(g)
+        h_prime = self.entity_layer(h).view(-1, self.heads * self.output_layer)
 
         return h_prime, g_prime
 
@@ -190,11 +211,19 @@ class ConvKB(nn.Module):
         self.channels = channels
         self.input_size = input_size
 
+        self.args = input_size, channels, dropout, dev
+
         self.loss_fct = nn.SoftMarginLoss()
         self.to(dev)
 
     def loss(self, y, t):
         return self.loss_fct(y, t)
+
+    def evaluate(self, h, g, triplets_tail, triplets_tail_type):
+        with torch.no_grad():
+            self.eval()
+            scores = torch.detach(self(h, g, triplets_tail, triplets_tail_type).cpu()).numpy()
+        return scores
 
     def forward(self, h, g, edge_idx, edge_type):
         row, col = edge_idx

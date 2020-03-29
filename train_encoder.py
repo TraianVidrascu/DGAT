@@ -6,7 +6,7 @@ import wandb
 
 from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
-from metrics import get_metrics, rank_triplet
+from metrics import get_metrics, rank_triplet, evaluate
 from model import KBNet
 from utilis import save_best, load_model, set_random_seed
 
@@ -103,7 +103,7 @@ def train_encoder(args, model, data_loader):
         save_best(model, loss_epoch, epoch + 1, ENCODER_FILE, asc=False)
 
         if (epoch + 1) % eval == 0:
-            metrics = get_encoder_metrics(h_prime, g_prime, data_loader, 'valid', model, dev=args.device)
+            metrics = get_encoder_metrics(data_loader, 'valid', model, dev=args.device)
             metrics['train_' + dataset_name + '_Loss_encoder'] = loss_epoch
             wandb.log(metrics)
         else:
@@ -114,47 +114,6 @@ def train_encoder(args, model, data_loader):
 
     del pos_edge_idx, pos_edge_type, x, g, graph, model
     torch.cuda.empty_cache()
-
-
-def evaluate_encoder(h, g, dataloader, fold, score_fct, dev='cpu'):
-    with torch.no_grad():
-        n, k = dataloader.get_properties()
-        _, _, graph = dataloader.load(fold, dev)
-        edge_idx, edge_type = dataloader.graph2idx(graph, dev)
-        m = edge_idx.shape[1]
-
-        ranks_head = []
-        ranks_tail = []
-        ranks = []
-
-        for i in range(m):
-            triplet_idx = edge_idx[:, i]
-            triplet_type = edge_type[i]
-
-            # evaluate for corrupted tail triplets
-            triplets_tail, position_tail = dataloader.corrupt_triplet(n, triplet_idx, head=False)
-            triplets_tail_type = torch.zeros(triplets_tail.shape[1]).long()
-            triplets_tail_type[:] = triplet_type
-            scores_tail = score_fct(h, g, triplets_tail, triplets_tail_type).cpu().numpy()
-
-            rank_tail = rank_triplet(scores_tail, position_tail)
-            ranks_tail.append(rank_tail)
-            ranks.append(rank_tail)
-
-            triplets_head, position_head = dataloader.corrupt_triplet(n, triplet_idx)
-            triplets_head_type = torch.zeros(triplets_head.shape[1]).long()
-            triplets_head_type[:] = triplet_type
-            scores_head = score_fct(h, g, triplets_head, triplets_head_type).cpu().numpy()
-
-            rank_head = rank_triplet(scores_head, position_head)
-            ranks_head.append(rank_head)
-            ranks.append(rank_head)
-
-        ranks_head = np.array(ranks_head)
-        ranks_tail = np.array(ranks_tail)
-        ranks = np.array(ranks)
-
-        return ranks_head, ranks_tail, ranks
 
 
 def get_ranking_metric(ranking_name, ranking, dataset_name, fold):
@@ -168,8 +127,8 @@ def get_ranking_metric(ranking_name, ranking, dataset_name, fold):
     return metrics
 
 
-def get_encoder_metrics(h, g, data_loader, fold, encoder, dev='cpu'):
-    ranks_head, ranks_tail, ranks = evaluate_encoder(h, g, data_loader, fold, encoder._dissimilarity, dev=dev)
+def get_encoder_metrics(data_loader, fold, encoder, dev='cpu'):
+    ranks_head, ranks_tail, ranks = evaluate(encoder, data_loader, fold, dev)
 
     dataset_name = data_loader.get_name()
 
@@ -247,9 +206,9 @@ def main():
     dataset.save_embedding(h, g)
 
     # evaluate test and valid fold after training
-    metrics = get_encoder_metrics(h, g, data_loader, 'valid', model, dev=args.device)
+    metrics = get_encoder_metrics(data_loader, 'valid', model, dev=args.device)
     wandb.log(metrics)
-    metrics = get_encoder_metrics(h, g, data_loader, 'test', model, dev=args.device)
+    metrics = get_encoder_metrics(data_loader, 'test', model, dev=args.device)
     wandb.log(metrics)
 
 

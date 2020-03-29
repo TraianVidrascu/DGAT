@@ -1,4 +1,5 @@
 import argparse
+import concurrent.futures
 
 import torch
 import numpy as np
@@ -6,7 +7,7 @@ import wandb
 
 from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
-from metrics import rank_triplet, get_metrics
+from metrics import rank_triplet, get_metrics, evaluate
 from model import ConvKB
 from utilis import load_model, save_model, save_best, set_random_seed
 
@@ -17,8 +18,8 @@ DECODER_CHECKPOINT = 'decoder_checkpoint.pt'
 def get_decoder(args):
     channels = args.channels
     dropout = args.dropout
-    dev = args.device
     input_size = args.output_encoder
+    dev = args.device
 
     model = ConvKB(input_size, channels, dropout=dropout, dev=dev)
     return model
@@ -47,7 +48,7 @@ def train_decoder(args, decoder, data_loader):
     optim = torch.optim.Adam(decoder.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=25, gamma=0.5, last_epoch=-1)
 
-    pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, dev)
+    pos_edge_idx, pos_edge_type = DataLoader.graph2idx(graph, dev)
     m = pos_edge_idx.shape[1]
     n = h.shape[0]
 
@@ -92,7 +93,7 @@ def train_decoder(args, decoder, data_loader):
         save_best(decoder, loss_epoch, epoch + 1, DECODER_FILE, asc=False)
 
         if (epoch + 1) % eval == 0:
-            metrics = get_decoder_metrics(decoder, data_loader, 'valid', dev=args.device)
+            metrics = get_decoder_metrics(decoder, data_loader, 'valid', dev)
 
             metrics['train_' + dataset_name + '_Loss_decoder'] = loss_epoch
             wandb.log(metrics)
@@ -100,52 +101,13 @@ def train_decoder(args, decoder, data_loader):
             wandb.log({'train_' + dataset_name + '_Loss_decoder': loss_epoch})
 
 
-def load_decoder(args):
-    decoder = get_decoder(args)
+def load_decoder(args, dev='cuda'):
+    decoder = get_decoder(args, dev)
     model, _ = load_model(decoder, DECODER_FILE)
     return model
 
 
-def evaluate_decoder(model, dataloader, fold, dev='cpu'):
-    with torch.no_grad():
-        model.eval()
-        n, k = dataloader.get_properties()
-        _, _, graph = dataloader.load(fold, dev)
-        edge_idx_test, edge_type_test = dataloader.graph2idx(graph, dev)
-        h, g = dataloader.load_embedding(dev)
 
-        m = edge_idx_test.shape[1]
-        ranks_head = []
-        ranks_tail = []
-        ranks = []
-        for i in range(m):
-            triplet_idx = edge_idx_test[:, i]
-            triplet_type = edge_type_test[i]
-
-            # evaluate for corrupted tail triplets
-            triplets_tail, position_tail = dataloader.corrupt_triplet(n, triplet_idx, head=False)
-            triplets_tail_type = torch.zeros(triplets_tail.shape[1]).long()
-            triplets_tail_type[:] = triplet_type
-            scores_tail = model(h, g, triplets_tail, triplets_tail_type).cpu().numpy()
-
-            rank_tail = rank_triplet(scores_tail, position_tail)
-            ranks_tail.append(rank_tail)
-            ranks.append(rank_tail)
-
-            triplets_head, position_head = dataloader.corrupt_triplet(n, triplet_idx)
-            triplets_head_type = torch.zeros(triplets_head.shape[1]).long()
-            triplets_head_type[:] = triplet_type
-            scores_head = model(h, g, triplets_head, triplets_head_type).cpu().numpy()
-
-            rank_head = rank_triplet(scores_head, position_head)
-            ranks_head.append(rank_head)
-            ranks.append(rank_head)
-
-        ranks_head = np.array(ranks_head)
-        ranks_tail = np.array(ranks_tail)
-        ranks = np.array(ranks)
-
-        return ranks_head, ranks_tail, ranks
 
 
 def get_ranking_metric(ranking_name, ranking, dataset_name, fold):
@@ -159,8 +121,8 @@ def get_ranking_metric(ranking_name, ranking, dataset_name, fold):
     return metrics
 
 
-def get_decoder_metrics(decoder, data_loader, fold, dev='cpu'):
-    ranks_head, ranks_tail, ranks = evaluate_decoder(decoder, data_loader, fold, dev=dev)
+def get_decoder_metrics(model, data_loader, fold, dev='cpu'):
+    ranks_head, ranks_tail, ranks = evaluate(model, data_loader, fold, dev=dev)
 
     dataset_name = data_loader.get_name()
 
@@ -179,15 +141,15 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=10, help="After how many epochs to evaluate.")
+    parser.add_argument("--eval", type=int, default=1, help="After how many epochs to evaluate.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=400, help="Number of training epochs for decoder.")
+    parser.add_argument("--epochs", type=int, default=1, help="Number of training epochs for decoder.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay decoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
-    parser.add_argument("--batch_size", type=int, default=28000, help="Batch size for decoder.")
-    parser.add_argument("--negative-ratio", type=int, default=40, help="Number of negative samples.")
+    parser.add_argument("--batch_size", type=int, default=8000, help="Batch size for decoder.")
+    parser.add_argument("--negative-ratio", type=int, default=2, help="Number of negative samples.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
 
     # objective function parameters
@@ -195,7 +157,7 @@ def main():
 
     # decoder parameters
     parser.add_argument("--channels", type=int, default=50, help="Number of channels for decoder.")
-    parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
+    parser.add_argument("--output_encoder", type=int, default=400, help="Number of neurons per output layer")
 
     args, cmdline_args = parser.parse_known_args()
 
@@ -216,9 +178,9 @@ def main():
     train_decoder(args, decoder, data_loader)
 
     # Evaluate test and valid fold after training is done
-    metrics = get_decoder_metrics(decoder, data_loader, 'test', dev=args.device)
+    metrics = get_decoder_metrics(decoder, data_loader, 'test', args.device)
     wandb.log(metrics)
-    metrics = get_decoder_metrics(decoder, data_loader, 'valid', dev=args.device)
+    metrics = get_decoder_metrics(decoder, data_loader, 'valid', args.device)
     wandb.log(metrics)
 
 

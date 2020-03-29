@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import torch
 
 
 def rank_triplet(scores, position):
@@ -41,3 +42,53 @@ def get_metrics(ranks):
 
     return mr, mrr, hits_1, hits_3, hits_10
 
+
+def evaluate_list(model, h, g, corrupted, list_info, head):
+    # evaluate for corrupted list
+    n = corrupted.shape[0]
+    original = list_info[0].expand(n)
+    position = list_info[1].item()
+    edge_types = list_info[2].expand(n)
+
+    edge_idx = torch.stack([corrupted, original]) if head else torch.stack([original, corrupted])
+    scores = model.evaluate(h, g, edge_idx, edge_types)
+
+    rank = rank_triplet(scores, position)
+    return rank
+
+
+def evaluate(model, dataloader, fold, dev='cpu'):
+    with torch.no_grad():
+        # load corrupted head triplets
+        triplets_head, lists_head = dataloader.load_evaluation_triplets_raw(fold=fold, head=True, dev=dev)
+        # load corrupted tail triplets
+        triplets_tail, lists_tail = dataloader.load_evaluation_triplets_raw(fold=fold, head=False, dev=dev)
+
+        # load relation and node embeddings
+        h, g = dataloader.load_embedding(dev)
+
+        no_lists = triplets_head.shape[0]
+        ranks_head = []
+        ranks_tail = []
+        for list_idx in range(no_lists):
+            # evaluate for corrupted head triplets
+            corrupted_head = triplets_head[list_idx, :]
+            list_info_head = lists_head[:, list_idx]
+            rank_head = evaluate_list(model, h, g, corrupted_head, list_info_head, head=True)
+
+            # evaluate for corrupted tail triplets
+            corrupted_tail = triplets_tail[list_idx, :]
+            list_info_tail = lists_tail[:, list_idx]
+            rank_tail = evaluate_list(model, h, g, corrupted_tail, list_info_tail, head=False)
+
+            ranks_head.append(rank_head)
+            ranks_tail.append(rank_tail)
+            print(list_idx)
+        ranks = ranks_head + ranks_tail
+
+        # convert to numpy arrays
+        ranks_head = np.array(ranks_head)
+        ranks_tail = np.array(ranks_tail)
+        ranks = np.array(ranks)
+
+        return ranks_head, ranks_tail, ranks
