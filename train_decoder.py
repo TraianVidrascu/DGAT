@@ -141,15 +141,15 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=1, help="After how many epochs to evaluate.")
+    parser.add_argument("--eval", type=int, default=25, help="After how many epochs to evaluate.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=1, help="Number of training epochs for decoder.")
+    parser.add_argument("--epochs", type=int, default=200, help="Number of training epochs for decoder.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay decoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
     parser.add_argument("--batch_size", type=int, default=8000, help="Batch size for decoder.")
-    parser.add_argument("--negative-ratio", type=int, default=2, help="Number of negative samples.")
+    parser.add_argument("--negative-ratio", type=int, default=40, help="Number of negative samples.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
 
     # objective function parameters
