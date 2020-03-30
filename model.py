@@ -145,7 +145,7 @@ class RelationLayer(nn.Module):
         self.to(device)
 
     def init_params(self):
-        nn.init.xavier_normal_(self.weights_ent.weight, gain=1.414)
+        nn.init.xavier_normal_(self.weights_rel.weight, gain=1.414)
 
     def forward(self, g):
         g_prime = self.weights_rel(g)
