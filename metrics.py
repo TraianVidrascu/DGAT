@@ -60,14 +60,12 @@ def evaluate_list(model, h, g, corrupted, list_info, head):
     return rank
 
 
-def evaluate(model, dataloader, fold, dev='cpu'):
+def evaluate(model, h, g, dataloader, fold, dev='cpu'):
     with torch.no_grad():
         # load corrupted head triplets
         triplets_head, lists_head = dataloader.load_evaluation_triplets_raw(fold=fold, head=True, dev='cpu')
         # load corrupted tail triplets
         triplets_tail, lists_tail = dataloader.load_evaluation_triplets_raw(fold=fold, head=False, dev='cpu')
-        # load relation and node embeddings
-        h, g = dataloader.load_embedding('cpu')
 
         no_lists = triplets_head.shape[0]
         ranks_head = []

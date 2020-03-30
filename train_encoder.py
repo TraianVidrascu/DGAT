@@ -103,7 +103,9 @@ def train_encoder(args, model, data_loader):
         save_best(model, loss_epoch, epoch + 1, ENCODER_FILE, asc=False)
 
         if (epoch + 1) % eval == 0:
-            metrics = get_encoder_metrics(data_loader, 'valid', model, dev=args.device)
+            model.eval()
+            h, g = model(x, g, pos_edge_idx, pos_edge_type)
+            metrics = get_encoder_metrics(data_loader, h, g, 'valid', model, dev=args.device)
             metrics['train_' + dataset_name + '_Loss_encoder'] = loss_epoch
             wandb.log(metrics)
         else:
@@ -127,8 +129,8 @@ def get_ranking_metric(ranking_name, ranking, dataset_name, fold):
     return metrics
 
 
-def get_encoder_metrics(data_loader, fold, encoder, dev='cpu'):
-    ranks_head, ranks_tail, ranks = evaluate(encoder, data_loader, fold, dev)
+def get_encoder_metrics(data_loader, h, g, fold, encoder, dev='cpu'):
+    ranks_head, ranks_tail, ranks = evaluate(encoder, h, g, data_loader, fold, dev)
 
     dataset_name = data_loader.get_name()
 
@@ -206,9 +208,7 @@ def main():
     dataset.save_embedding(h, g)
 
     # evaluate test and valid fold after training
-    metrics = get_encoder_metrics(data_loader, 'valid', model, dev=args.device)
-    wandb.log(metrics)
-    metrics = get_encoder_metrics(data_loader, 'test', model, dev=args.device)
+    metrics = get_encoder_metrics(data_loader, h, g, 'test', model, dev=args.device)
     wandb.log(metrics)
 
 

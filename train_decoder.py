@@ -96,7 +96,7 @@ def train_decoder(args, decoder, data_loader):
         save_best(decoder, loss_epoch, epoch + 1, DECODER_FILE, asc=False)
 
         if (epoch + 1) % eval == 0:
-            metrics = get_decoder_metrics(decoder, data_loader, 'valid', dev)
+            metrics = get_decoder_metrics(decoder, h, g, data_loader, 'valid', dev)
 
             metrics['train_' + dataset_name + '_Loss_decoder'] = loss_epoch
             wandb.log(metrics)
@@ -121,8 +121,8 @@ def get_ranking_metric(ranking_name, ranking, dataset_name, fold):
     return metrics
 
 
-def get_decoder_metrics(model, data_loader, fold, dev='cpu'):
-    ranks_head, ranks_tail, ranks = evaluate(model, data_loader, fold, dev=dev)
+def get_decoder_metrics(model, h, g, data_loader, fold, dev='cpu'):
+    ranks_head, ranks_tail, ranks = evaluate(model, h, g, data_loader, fold, dev=dev)
 
     dataset_name = data_loader.get_name()
 
@@ -178,11 +178,12 @@ def main():
     train_decoder(args, decoder, data_loader)
     print('done training!')
 
+    h, g = data_loader.load_embedding()
     # Evaluate test and valid fold after training is done
-    metrics = get_decoder_metrics(decoder, data_loader, 'test', args.device)
+    metrics = get_decoder_metrics(decoder, h, g, data_loader, 'test', args.device)
     print('done eval test!')
     wandb.log(metrics)
-    metrics = get_decoder_metrics(decoder, data_loader, 'valid', args.device)
+    metrics = get_decoder_metrics(decoder, h, g, data_loader, 'valid', args.device)
     print('done eval valid!')
     wandb.log(metrics)
 
