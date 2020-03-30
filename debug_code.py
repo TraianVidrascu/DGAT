@@ -8,16 +8,16 @@ from data.dataset import FB15Dataset, WN18RR
 
 # from dataloader import DataLoader
 #
-t = time.time()
-dataset_a = FB15Dataset()
-s = time.time()
-print('Initialize Dataset:' + str(s - t))
-#
-t = time.time()
-dataset_a.pre_process()
-s = time.time()
-print('Process Dataset:' + str(s - t))
-#
+# t = time.time()
+# dataset_a = FB15Dataset()
+# s = time.time()
+# print('Initialize Dataset:' + str(s - t))
+# #
+# t = time.time()
+# dataset_a.pre_process()
+# s = time.time()
+# print('Process Dataset:' + str(s - t))
+# #
 # t = time.time()
 # ldr = DataLoader(dataset_a)
 # s = time.time()
@@ -274,6 +274,7 @@ from dataloader import DataLoader
 
 dataset = FB15Dataset()
 
-t, l = dataset.load_evaluation_triplets_raw('valid')
-print(t)
-print(l)
+dataset.pre_process()
+dataset = WN18RR()
+
+dataset.pre_process()

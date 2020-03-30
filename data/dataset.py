@@ -5,7 +5,7 @@ import networkx as nk
 import wandb
 import pandas as pd
 import numpy as np
-
+import concurrent.futures
 from dataloader import DataLoader
 
 
@@ -16,6 +16,7 @@ class Dataset:
         self.eval_dir = eval_dir
         self.n = -1
         self.k = -1
+        self.paths = []
 
     def _load(self):
         with open(self.processed_dir + 'node_map.pickle', 'rb') as handler:
@@ -132,7 +133,12 @@ class Dataset:
         x, node_mapper = self.read_entities()
         g, rel_mapper = self.read_relations()
         self.read_edges(node_mapper, rel_mapper)
-        self.save_triplets_raw()
+        self.save_paths(2)
+        # self.save_paths(3)
+        # self.save_paths(4)
+        # self.save_paths(5)
+
+        # self.save_triplets_raw()
 
     def save_evaluation_triplets_raw(self, fold, head=True, dev='cpu'):
         x, g, graph = self.load_fold(fold, dev)
@@ -188,6 +194,34 @@ class Dataset:
         lists = torch.load(lists_path).to(dev)
 
         return triplets, lists
+
+    def dfs_path(self, graph, path, node, depth, max_depth):
+        depth += 1
+        if depth == 0:
+            path = [node]
+        if depth == max_depth:
+            new_path = path + [node]
+            self.paths.append(new_path)
+            return
+        outbounds = graph[node]
+        for outbound in outbounds.keys():
+            label = outbounds[outbound][0]['label']
+            new_path = path + [label]
+            self.dfs_path(graph, new_path, outbound, depth, max_depth)
+
+    def save_paths(self, depth=2):
+        _, _, graph = self.load_fold('train', 'cpu')
+        nodes = graph.nodes()
+        columns = ['x'] + ['g_' + str(i) for i in range(1, depth + 1)] + ['y']
+
+        executor = concurrent.futures.ProcessPoolExecutor()
+        for node in nodes:
+            self.dfs_path(graph, [], node, -1, depth)
+            print('Launched: ' + str(node)+' depth: '+str(depth))
+
+
+        df = pd.DataFrame(columns=columns, data=self.paths, dtype=int)
+        df.to_pickle(self.processed_dir + 'paths_' + str(depth) + '.pkl')
 
 
 class FB15Dataset(Dataset):
