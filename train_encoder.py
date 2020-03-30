@@ -104,8 +104,8 @@ def train_encoder(args, model, data_loader):
 
         if (epoch + 1) % eval == 0:
             model.eval()
-            h_prime, h_prime = model(x, g, pos_edge_idx, pos_edge_type)
-            metrics = get_encoder_metrics(data_loader, h_prime, h_prime, 'valid', model, dev=args.device)
+            h_prime, g_prime = model(x, g, pos_edge_idx, pos_edge_type)
+            metrics = get_encoder_metrics(data_loader, h_prime, g_prime, 'valid', model, dev=args.device)
             metrics['train_' + dataset_name + '_Loss_encoder'] = loss_epoch
             wandb.log(metrics)
         else:
