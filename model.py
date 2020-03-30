@@ -116,12 +116,13 @@ class RelationalAttentionLayer(nn.Module):
 
 
 class EntityLayer(nn.Module):
-    def __init__(self, initial_size, layer_size, dev='cpu'):
+    def __init__(self, initial_size, heads, layer_size, dev='cpu'):
         super(EntityLayer, self).__init__()
         # entity embedding
         self.weights_ent = nn.Linear(initial_size, layer_size)
         self.init_params()
         self.to(dev)
+        self.heads = heads
 
     def init_params(self):
         nn.init.xavier_normal_(self.weights_ent.weight, gain=1.414)
@@ -156,11 +157,11 @@ class KBNet(nn.Module):
     def __init__(self, x_size, g_size, hidden_size, output_size, heads, margin=1, device='cpu'):
         super(KBNet, self).__init__()
         self.input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
-        self.input_entity_layer = EntityLayer(x_size, heads * hidden_size, device)
+        self.input_entity_layer = EntityLayer(x_size, heads, hidden_size, device)
         self.input_relation_layer = RelationLayer(g_size, heads * hidden_size, device)
 
-        self.output_layer = RelationalAttentionLayer(heads * hidden_size, g_size, output_size, heads, device=device)
-        self.output_entity_layer = EntityLayer(hidden_size, heads * output_size, device)
+        self.output_layer = RelationalAttentionLayer(heads * hidden_size, heads * hidden_size, output_size, heads, device=device)
+        self.output_entity_layer = EntityLayer(x_size, heads, output_size, device)
         self.output_relation_layer = RelationLayer(heads * hidden_size, heads * output_size, device)
 
         self.loss_fct = nn.MarginRankingLoss(margin=margin)
@@ -193,14 +194,14 @@ class KBNet(nn.Module):
 
     def forward(self, x, g, edge_idx, edge_type):
         h = self.input_layer(x, g, edge_idx, edge_type)
-        h_prime = self.input_entity_layer(x,h).view(-1, self.heads * self.hidden_size)
-        g_prime = self.input_relation_layer(g)
+        h_prime = self.input_entity_layer(x, h).view(-1, self.heads * self.hidden_size)
+        g = self.input_relation_layer(g)
 
-        h = self.output_layer(x, h_prime, g_prime, edge_idx, edge_type)
-        h_prime = self.output_entity_layer(x,h).view(-1, self.heads * self.output_size)
-        g_prime = self.output_relation_layer(g)
+        h = self.output_layer(h_prime, g, edge_idx, edge_type)
+        h_prime = self.output_entity_layer(x, h).view(-1, self.heads * self.output_size)
+        g = self.output_relation_layer(g)
 
-        return h_prime, g_prime
+        return h_prime, g
 
 
 class ConvKB(nn.Module):
