@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import torch
+import concurrent.futures
 
 
 def rank_triplet(scores, position):
@@ -55,6 +56,7 @@ def evaluate_list(model, h, g, corrupted, list_info, head):
 
     rank = rank_triplet(scores, position)
     del n, original, position, edge_types, edge_idx, scores
+    torch.cuda.empty_cache()
     return rank
 
 
@@ -64,7 +66,6 @@ def evaluate(model, dataloader, fold, dev='cpu'):
         triplets_head, lists_head = dataloader.load_evaluation_triplets_raw(fold=fold, head=True, dev='cpu')
         # load corrupted tail triplets
         triplets_tail, lists_tail = dataloader.load_evaluation_triplets_raw(fold=fold, head=False, dev='cpu')
-
         # load relation and node embeddings
         h, g = dataloader.load_embedding('cpu')
 
@@ -74,13 +75,12 @@ def evaluate(model, dataloader, fold, dev='cpu'):
 
         for list_idx in range(no_lists):
             # evaluate for corrupted head triplets
+
             rank_head = evaluate_list(model, h.to(dev), g.to(dev), triplets_head[list_idx, :].to(dev),
-                                      lists_head[:, list_idx].to(dev),
-                                      head=True)
+                                      lists_head[:, list_idx].to(dev), True)
             # evaluate for corrupted tail triplets
             rank_tail = evaluate_list(model, h.to(dev), g.to(dev), triplets_tail[list_idx, :].to(dev),
-                                      lists_tail[:, list_idx].to(dev),
-                                      head=False)
+                                      lists_tail[:, list_idx].to(dev), False)
 
             ranks_head.append(rank_head)
             ranks_tail.append(rank_tail)
