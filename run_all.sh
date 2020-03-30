@@ -12,7 +12,7 @@
 
 conda activate dgat
 python train_encoder.py --dataset FB15k-237
-python train_decoder.py  --batch_size 64000 --dataset FB15k-237
+python train_decoder.py  --batch_size 64000 --eval 25 --epochs 200 --dataset FB15k-237
 
 python train_encoder.py --dataset WN18RR
-python train_decoder.py  --batch_size 64000 --dataset WN18RR
+python train_decoder.py  --batch_size 64000 --eval 25 --epochs 200 --dataset WN18RR

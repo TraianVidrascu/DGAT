@@ -38,8 +38,8 @@ def train_decoder(args, decoder, data_loader):
     eval = args.eval
     batch_size = args.batch_size
 
-    _, _, graph = data_loader.load_train(dev)
-    h, g = data_loader.load_embedding(dev)
+    _, _, graph = data_loader.load_train('cpu')
+    h, g = data_loader.load_embedding('cpu')
 
     first = 0
     # if args.checkpoint:
@@ -48,18 +48,18 @@ def train_decoder(args, decoder, data_loader):
     optim = torch.optim.Adam(decoder.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=25, gamma=0.5, last_epoch=-1)
 
-    pos_edge_idx, pos_edge_type = DataLoader.graph2idx(graph, dev)
+    pos_edge_idx, pos_edge_type = DataLoader.graph2idx(graph, 'cpu')
     m = pos_edge_idx.shape[1]
     n = h.shape[0]
 
     for epoch in range(first, epochs):
         decoder.train()
-        neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio, dev)
+        neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio, 'cpu')
 
         m_neg = neg_edge_idx.shape[1]
 
         # input and target ( positive and negative samples
-        target = torch.cat([torch.ones(m), -torch.ones(m_neg)]).to(dev)
+        target = torch.cat([torch.ones(m), -torch.ones(m_neg)])
         edge_idx = torch.cat([pos_edge_idx, neg_edge_idx], dim=1)
         edge_type = torch.cat([pos_edge_type, neg_edge_type])
 
@@ -73,13 +73,9 @@ def train_decoder(args, decoder, data_loader):
         for itt in range(0, total_size, batch_size):
             batch = iteration[itt:itt + batch_size]
 
-            batch_idx = edge_idx[:, batch]
-            batch_type = edge_type[batch]
-            batch_target = target[batch]
+            prediction = decoder(h.to(dev), g.to(dev), edge_idx[:, batch].to(dev), edge_type[batch].to(dev))
 
-            prediction = decoder(h, g, batch_idx, batch_type)
-
-            loss = decoder.loss(prediction, batch_target)
+            loss = decoder.loss(prediction, target[batch].to(dev))
 
             # optimization
             optim.zero_grad()
@@ -105,9 +101,6 @@ def load_decoder(args, dev='cuda'):
     decoder = get_decoder(args, dev)
     model, _ = load_model(decoder, DECODER_FILE)
     return model
-
-
-
 
 
 def get_ranking_metric(ranking_name, ranking, dataset_name, fold):
@@ -141,14 +134,14 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=25, help="After how many epochs to evaluate.")
+    parser.add_argument("--eval", type=int, default=1, help="After how many epochs to evaluate.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=200, help="Number of training epochs for decoder.")
+    parser.add_argument("--epochs", type=int, default=1, help="Number of training epochs for decoder.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay decoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
-    parser.add_argument("--batch_size", type=int, default=8000, help="Batch size for decoder.")
+    parser.add_argument("--batch_size", type=int, default=16000, help="Batch size for decoder.")
     parser.add_argument("--negative-ratio", type=int, default=40, help="Number of negative samples.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
 
@@ -176,11 +169,14 @@ def main():
 
     # train decoder model
     train_decoder(args, decoder, data_loader)
+    print('done training!')
 
     # Evaluate test and valid fold after training is done
     metrics = get_decoder_metrics(decoder, data_loader, 'test', args.device)
+    print('done eval test!')
     wandb.log(metrics)
     metrics = get_decoder_metrics(decoder, data_loader, 'valid', args.device)
+    print('done eval valid!')
     wandb.log(metrics)
 
 
