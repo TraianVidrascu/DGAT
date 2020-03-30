@@ -99,9 +99,9 @@ class RelationalAttentionLayer(nn.Module):
             self.self_edges = torch.zeros((n, self.heads, self.out_size)).to(self.device)
             self.self_edge_mask = torch.tensor([i for i in range(n)]).long().to(self.device)
 
-    def forward(self, x, h, g, edge_idx, edge_type):
+    def forward(self, h, g, edge_idx, edge_type):
         # self edges
-        n = x.shape[0]
+        n = h.shape[0]
         self._self_edges_mask(n)
 
         # compute edge embeddings
@@ -116,7 +116,7 @@ class RelationalAttentionLayer(nn.Module):
 
 
 class EntityLayer(nn.Module):
-    def __init__(self, initial_size, layer_size, dev='device'):
+    def __init__(self, initial_size, layer_size, dev='cpu'):
         super(EntityLayer, self).__init__()
         # entity embedding
         self.weights_ent = nn.Linear(initial_size, layer_size)
@@ -156,10 +156,12 @@ class KBNet(nn.Module):
     def __init__(self, x_size, g_size, hidden_size, output_size, heads, margin=1, device='cpu'):
         super(KBNet, self).__init__()
         self.input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
-        self.output_layer = RelationalAttentionLayer(heads * hidden_size, g_size, output_size, heads, device=device)
+        self.input_entity_layer = EntityLayer(x_size, heads * hidden_size, device)
+        self.input_relation_layer = RelationLayer(g_size, heads * hidden_size, device)
 
-        self.relation_layer = RelationLayer(g_size, heads * output_size)
-        self.entity_layer = EntityLayer(x_size, heads * output_size)
+        self.output_layer = RelationalAttentionLayer(heads * hidden_size, g_size, output_size, heads, device=device)
+        self.output_entity_layer = EntityLayer(hidden_size, heads * output_size, device)
+        self.output_relation_layer = RelationLayer(heads * hidden_size, heads * output_size, device)
 
         self.loss_fct = nn.MarginRankingLoss(margin=margin)
 
@@ -190,11 +192,13 @@ class KBNet(nn.Module):
         return scores
 
     def forward(self, x, g, edge_idx, edge_type):
-        h = self.input_layer(x, x, g, edge_idx, edge_type)
-        h = self.output_layer(x, h, g, edge_idx, edge_type)
+        h = self.input_layer(x, g, edge_idx, edge_type)
+        h_prime = self.input_entity_layer(x,h).view(-1, self.heads * self.hidden_size)
+        g_prime = self.input_relation_layer(g)
 
-        g_prime = self.relation_layer(g)
-        h_prime = self.entity_layer(h).view(-1, self.heads * self.output_layer)
+        h = self.output_layer(x, h_prime, g_prime, edge_idx, edge_type)
+        h_prime = self.output_entity_layer(x,h).view(-1, self.heads * self.output_size)
+        g_prime = self.output_relation_layer(g)
 
         return h_prime, g_prime
 

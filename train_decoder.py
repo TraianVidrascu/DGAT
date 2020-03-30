@@ -54,7 +54,8 @@ def train_decoder(args, decoder, data_loader):
 
     for epoch in range(first, epochs):
         decoder.train()
-        neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio, 'cpu')
+        neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio,
+                                                                   'cpu')
 
         m_neg = neg_edge_idx.shape[1]
 
@@ -69,11 +70,12 @@ def train_decoder(args, decoder, data_loader):
 
         iteration = torch.randperm(total_size).to(dev)
         loss_epoch = 0
-        no_batch = total_size / batch_size
+        no_batch = int(total_size / batch_size)
+        batch_idx = 0
         for itt in range(0, total_size, batch_size):
             batch = iteration[itt:itt + batch_size]
 
-            prediction = decoder(h.to(dev), g.to(dev), edge_idx[:, batch].to(dev), edge_type[batch].to(dev))
+            prediction = decoder(h.to(dev), g.to(dev), edge_idx[:, batch], edge_type[batch])
 
             loss = decoder.loss(prediction, target[batch].to(dev))
 
@@ -82,7 +84,12 @@ def train_decoder(args, decoder, data_loader):
             loss.backward()
             optim.step()
             loss_epoch += loss.item() / no_batch
-
+            batch_idx += 1
+            print('Epoch: %3.d' % epoch +
+                  'Iteration: %3.d' % batch_idx +
+                  'Loss iteration %.4f' % loss.item())
+            del prediction, loss
+            torch.cuda.empty_cache()
         scheduler.step()
 
         # save_model(decoder, loss_epoch, epoch + 1, DECODER_CHECKPOINT)

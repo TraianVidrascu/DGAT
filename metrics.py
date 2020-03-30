@@ -84,9 +84,6 @@ def evaluate(model, dataloader, fold, dev='cpu'):
 
             ranks_head.append(rank_head)
             ranks_tail.append(rank_tail)
-            print('List idx %.4d' % list_idx +
-                  'rank head %.4d' % rank_head +
-                  'rank tail %.4d' % rank_tail)
 
         ranks = ranks_head + ranks_tail
 

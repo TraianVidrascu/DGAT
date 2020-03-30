@@ -9,7 +9,7 @@ from data.dataset import FB15Dataset, WN18RR
 # from dataloader import DataLoader
 #
 t = time.time()
-dataset_a = WN18RR()
+dataset_a = FB15Dataset()
 s = time.time()
 print('Initialize Dataset:' + str(s - t))
 #

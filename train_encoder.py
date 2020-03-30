@@ -173,7 +173,7 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
-    parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
+    parser.add_argument("--dataset", type=str, default='WN18RR', help="Dataset used for training.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
