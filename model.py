@@ -149,9 +149,9 @@ class RelationLayer(nn.Module):
         return g_prime
 
 
-class DKBAT(nn.Module):
+class DKBATNet(nn.Module):
     def __init__(self, x_size, g_size, hidden_size, output_size, heads, alpha=0.5, margin=1, device='cpu'):
-        super(DKBAT, self).__init__()
+        super(DKBATNet, self).__init__()
         self.inbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
         self.outbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
 
@@ -274,18 +274,21 @@ class KBNet(nn.Module):
         return h
 
     def forward(self, x, g, edge_idx, edge_type):
+        x = F.normalize(x, p=2, dim=1).detach()
+
         h = self.input_layer(x, g, edge_idx, edge_type)
         h = self.actv(h)
-        h = F.normalize(h, p=1, dim=2)
+        h = F.normalize(h, p=2, dim=2)
         h = self._concat(h)
 
         h = self.output_layer(h, g, edge_idx, edge_type)
         h = self.actv(h)
-        h = F.normalize(h, p=1, dim=2)
+        h = F.normalize(h, p=2, dim=2)
 
         h_prime = self.entity_layer(x, h)
         g_prime = self.relation_layer(g)
 
+        h_prime = F.normalize(h_prime, p=2, dim=2)
         h_prime = self._merge_heads(h_prime)
 
         return h_prime, g_prime

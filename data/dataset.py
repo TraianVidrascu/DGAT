@@ -99,6 +99,10 @@ class Dataset:
         torch.save(g, path_g)
         wandb.save(path_h)
         wandb.save(path_g)
+        path_h = osp.join(wandb.run.dir, 'h.pt')
+        path_g = osp.join(wandb.run.dir, 'g.pt')
+        torch.save(h, path_h)
+        torch.save(g, path_g)
 
     def read_entities(self):
         mapper = self._read_map('entity2id.txt')
@@ -217,8 +221,7 @@ class Dataset:
         executor = concurrent.futures.ProcessPoolExecutor()
         for node in nodes:
             self.dfs_path(graph, [], node, -1, depth)
-            print('Launched: ' + str(node)+' depth: '+str(depth))
-
+            print('Launched: ' + str(node) + ' depth: ' + str(depth))
 
         df = pd.DataFrame(columns=columns, data=self.paths, dtype=int)
         df.to_pickle(self.processed_dir + 'paths_' + str(depth) + '.pkl')

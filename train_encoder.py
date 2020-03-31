@@ -7,8 +7,12 @@ import wandb
 from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
 from metrics import get_metrics, rank_triplet, evaluate
-from model import KBNet
+from model import KBNet, DKBATNet
 from utilis import save_best, load_model, set_random_seed
+
+DKBAT = 'DKBAT'
+
+KBAT = 'KBAT'
 
 ENCODER_FILE = 'encoder.pt'
 ENCODER_CHECKPOINT = 'encoder_check.pt'
@@ -16,14 +20,20 @@ ENCODER_CHECKPOINT = 'encoder_check.pt'
 
 def get_encoder(args, x_size, g_size):
     # model parameters
+    model_name = args.model
     h_size = args.hidden_encoder
     o_size = args.output_encoder
     heads = args.heads
     margin = args.margin
+    alpha = args.alpha
 
     dev = args.device
 
-    model = KBNet(x_size, g_size, h_size, o_size, heads, margin, device=dev)
+    model = None
+    if model_name == KBAT:
+        model = KBNet(x_size, g_size, h_size, o_size, heads, margin, device=dev)
+    elif model_name == DKBAT:
+        model = DKBATNet(x_size, g_size, h_size, o_size, heads, alpha, margin, device=dev)
 
     return model
 
@@ -42,7 +52,6 @@ def train_encoder(args, model, data_loader):
 
     # load data
     x, g, graph = data_loader.load_train(dev)
-
     wandb.watch(model, log="all")
 
     first = 0
@@ -185,11 +194,14 @@ def main():
     parser.add_argument("--heads", type=int, default=2, help="Number of heads per layer")
     parser.add_argument("--hidden_encoder", type=int, default=200, help="Number of neurons per hidden layer")
     parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
+    parser.add_argument("--alpha", type=float, default=0.5, help="Inbound neighborhood importance.")
+    parser.add_argument("--model", type=str, default=KBAT, help='Model name')
 
     args, cmdline_args = parser.parse_known_args()
 
+    model_name = args.model
     # set up weights and biases
-    wandb.init(project="KBAT_encoder", config=args)
+    wandb.init(project=model_name + "_encoder", config=args)
 
     if args.dataset == 'FB15k-237':
         dataset = FB15Dataset()
