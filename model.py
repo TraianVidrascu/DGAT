@@ -222,11 +222,11 @@ class DKBATNet(nn.Module):
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
 
-        h_prime = self.output_entity_layer(x, h).view(-1, self.heads * self.output_size)
+        h_prime = self.entity_layer(x, h).view(-1, self.heads * self.output_size)
         h_prime = F.normalize(h_prime, p=2, dim=2)
 
         h_prime = self._merge_heads(h_prime)
-        g_prime = self.output_relation_layer(g)
+        g_prime = self.relation_layer(g)
 
         return h_prime, g_prime
 
