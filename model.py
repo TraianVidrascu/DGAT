@@ -205,7 +205,7 @@ class DKBATNet(nn.Module):
     def forward(self, x, g, edge_idx, edge_type):
         x = F.normalize(x, p=2, dim=1).detach()
         torch.cuda.empty_cache()
-
+        torch.cuda.memory_allocated()
         row, col = edge_idx
         outbound_edge_idx = torch.stack([col, row])
 
@@ -222,11 +222,11 @@ class DKBATNet(nn.Module):
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
 
-        h_prime = self.output_entity_layer(x, h).view(-1, self.heads * self.output_size)
+        h_prime = self.entity_layer(x, h)
         h_prime = F.normalize(h_prime, p=2, dim=2)
 
         h_prime = self._merge_heads(h_prime)
-        g_prime = self.output_relation_layer(g)
+        g_prime = self.relation_layer(g)
 
         return h_prime, g_prime
 
