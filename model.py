@@ -276,6 +276,9 @@ class KBNet(nn.Module):
     def forward(self, x, g, edge_idx, edge_type):
         x = F.normalize(x, p=2, dim=1).detach()
 
+        torch.cuda.empty_cache()
+
+
         h = self.input_layer(x, g, edge_idx, edge_type)
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
