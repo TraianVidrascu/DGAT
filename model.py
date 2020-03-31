@@ -205,7 +205,7 @@ class DKBATNet(nn.Module):
     def forward(self, x, g, edge_idx, edge_type):
         x = F.normalize(x, p=2, dim=1).detach()
         torch.cuda.empty_cache()
-        torch.cuda.memory_allocated()
+
         row, col = edge_idx
         outbound_edge_idx = torch.stack([col, row])
 
