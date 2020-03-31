@@ -11,4 +11,4 @@
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
 
 conda activate dgat
-python train_encoder.py --model KBAT --dataset WN18RR
+python train_encoder.py --model KBAT --dataset WN18RR --margin 5
