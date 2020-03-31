@@ -155,8 +155,10 @@ class DKBATNet(nn.Module):
         self.inbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
         self.outbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
 
-        self.inbound_output_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
-        self.outbound_output_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
+        self.inbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads,
+                                                             device=device)
+        self.outbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads,
+                                                              device=device)
 
         self.entity_layer = EntityLayer(x_size, heads, hidden_size, device)
         self.relation_layer = RelationLayer(g_size, heads * hidden_size, device)
@@ -201,21 +203,28 @@ class DKBATNet(nn.Module):
         return h
 
     def forward(self, x, g, edge_idx, edge_type):
+        x = F.normalize(x, p=2, dim=1).detach()
+        torch.cuda.empty_cache()
+
         row, col = edge_idx
         outbound_edge_idx = torch.stack([col, row])
 
         h_inbound = self.inbound_input_layer(x, g, edge_idx, edge_type)
         h_outbound = self.outbound_input_layer(x, g, outbound_edge_idx, edge_type)
         h = self.alpha * h_inbound + (1 - self.alpha) * h_outbound
-        h = self._concat(h)
         h = self.actv(h)
+        h = F.normalize(h, p=2, dim=2)
+        h = self._concat(h)
 
         h_inbound = self.inbound_output_layer(h, g, edge_idx, edge_type)
         h_outbound = self.outbound_output_layer(h, g, outbound_edge_idx, edge_type)
         h = self.alpha * h_inbound + (1 - self.alpha) * h_outbound
         h = self.actv(h)
+        h = F.normalize(h, p=2, dim=2)
 
         h_prime = self.output_entity_layer(x, h).view(-1, self.heads * self.output_size)
+        h_prime = F.normalize(h_prime, p=2, dim=2)
+
         h_prime = self._merge_heads(h_prime)
         g_prime = self.output_relation_layer(g)
 
@@ -277,7 +286,6 @@ class KBNet(nn.Module):
         x = F.normalize(x, p=2, dim=1).detach()
 
         torch.cuda.empty_cache()
-
 
         h = self.input_layer(x, g, edge_idx, edge_type)
         h = self.actv(h)
