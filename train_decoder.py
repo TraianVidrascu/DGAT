@@ -21,7 +21,8 @@ def get_decoder(args):
     input_size = args.output_encoder
     dev = args.device
 
-    model = ConvKB(input_size, channels, dropout=dropout, dev=dev)
+    model = ConvKB(input_dim=input_size, input_seq_len=3, in_channels=1, out_channels=channels, drop_prob=dropout,
+                   dev=dev)
     return model
 
 
@@ -52,6 +53,7 @@ def train_decoder(args, decoder, data_loader):
     m = pos_edge_idx.shape[1]
     n = h.shape[0]
 
+    criterion = torch.nn.SoftMarginLoss()
     for epoch in range(first, epochs):
         decoder.train()
         neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio,
@@ -74,10 +76,14 @@ def train_decoder(args, decoder, data_loader):
         batch_idx = 0
         for itt in range(0, total_size, batch_size):
             batch = iteration[itt:itt + batch_size]
+            row, col = edge_idx[:, batch]
+            batch_type = edge_type[batch]
 
-            prediction = decoder(h.to(dev), g.to(dev), edge_idx[:, batch], edge_type[batch])
+            conv_input = torch.stack([h[row], g[batch_type], h[col]], dim=1).to(dev)
 
-            loss = decoder.loss(prediction, target[batch].to(dev))
+            prediction = decoder(conv_input)
+
+            loss = criterion(prediction.squeeze(-1), target[batch].to(dev))
 
             # optimization
             optim.zero_grad()
@@ -85,9 +91,9 @@ def train_decoder(args, decoder, data_loader):
             optim.step()
             loss_epoch += loss.item() / no_batch
             batch_idx += 1
-            print('Epoch: %3.d' % epoch +
-                  'Iteration: %3.d' % batch_idx +
-                  'Loss iteration %.4f' % loss.item())
+            print('Epoch:%3.d ' % epoch +
+                  'Iteration:%3.d ' % batch_idx +
+                  'Loss iteration:%.4f ' % loss.item())
             del prediction, loss
             torch.cuda.empty_cache()
         scheduler.step()
@@ -141,10 +147,10 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=1, help="After how many epochs to evaluate.")
+    parser.add_argument("--eval", type=int, default=25, help="After how many epochs to evaluate.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=1, help="Number of training epochs for decoder.")
+    parser.add_argument("--epochs", type=int, default=200, help="Number of training epochs for decoder.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay decoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")

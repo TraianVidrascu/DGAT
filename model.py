@@ -160,7 +160,8 @@ class KBNet(nn.Module):
         self.input_entity_layer = EntityLayer(x_size, heads, hidden_size, device)
         self.input_relation_layer = RelationLayer(g_size, heads * hidden_size, device)
 
-        self.output_layer = RelationalAttentionLayer(heads * hidden_size, heads * hidden_size, output_size, heads, device=device)
+        self.output_layer = RelationalAttentionLayer(heads * hidden_size, heads * hidden_size, output_size, heads,
+                                                     device=device)
         self.output_entity_layer = EntityLayer(x_size, heads, output_size, device)
         self.output_relation_layer = RelationLayer(heads * hidden_size, heads * output_size, device)
 
@@ -204,42 +205,80 @@ class KBNet(nn.Module):
         return h_prime, g
 
 
+# class ConvKB(nn.Module):
+#     def __init__(self, input_size, channels, dropout=0.3, dev='cpu'):
+#         super(ConvKB, self).__init__()
+#
+#         self.conv = nn.Conv2d(1, channels, kernel_size=(3, 1), bias=True)
+#         self.weight = nn.Linear(input_size * channels, 1)
+#         self.dropout = nn.Dropout(dropout)
+#
+#         self.device = dev
+#         self.channels = channels
+#         self.input_size = input_size
+#
+#         self.args = input_size, channels, dropout, dev
+#
+#         self.loss_fct = nn.SoftMarginLoss()
+#         self.to(dev)
+#
+#     def loss(self, y, t):
+#         return self.loss_fct(y, t)
+#
+#     def evaluate(self, h, g, triplets_tail, triplets_tail_type):
+#         with torch.no_grad():
+#             self.eval()
+#             scores = torch.detach(self(h, g, triplets_tail, triplets_tail_type).cpu()).numpy()
+#         return scores
+#
+#     def forward(self, h, g, edge_idx, edge_type):
+#         row, col = edge_idx
+#
+#         h = torch.cat([h[row][:, None, :], h[col][:, None, :], g[edge_type][:, None, :]], dim=1)[:, None, :, :]
+#
+#         h = self.conv(h).squeeze()
+#         h = torch.relu(h)
+#
+#         h = h.view(-1, self.channels * self.input_size)
+#         h = self.dropout(h)
+#         h = self.weight(h).squeeze()
+#
+#         return h
+
 class ConvKB(nn.Module):
-    def __init__(self, input_size, channels, dropout=0.3, dev='cpu'):
-        super(ConvKB, self).__init__()
+    def __init__(self, input_dim, input_seq_len, in_channels, out_channels, drop_prob,dev='cpu'):
+        super().__init__()
 
-        self.conv = nn.Conv2d(1, channels, kernel_size=(3, 1), bias=True)
-        self.weight = nn.Linear(input_size * channels, 1)
-        self.dropout = nn.Dropout(dropout)
+        self.conv_layer = nn.Conv2d(
+            in_channels, out_channels, (1, input_seq_len))  # kernel size -> 1*input_seq_length(i.e. 2)
+        self.dropout = nn.Dropout(drop_prob)
+        self.non_linearity = nn.ReLU()
+        self.fc_layer = nn.Linear((input_dim) * out_channels, 1)
 
-        self.device = dev
-        self.channels = channels
-        self.input_size = input_size
-
-        self.args = input_size, channels, dropout, dev
-
-        self.loss_fct = nn.SoftMarginLoss()
+        nn.init.xavier_uniform_(self.fc_layer.weight, gain=1.414)
+        nn.init.xavier_uniform_(self.conv_layer.weight, gain=1.414)
+        self.dev = dev
         self.to(dev)
+    def forward(self, conv_input):
+        batch_size, length, dim = conv_input.size()
+        # assuming inputs are of the form ->
+        conv_input = conv_input.transpose(1, 2)
+        # batch * length(which is 3 here -> entity,relation,entity) * dim
+        # To make tensor of size 4, where second dim is for input channels
+        conv_input = conv_input.unsqueeze(1)
 
-    def loss(self, y, t):
-        return self.loss_fct(y, t)
+        out_conv = self.dropout(
+            self.non_linearity(self.conv_layer(conv_input)))
 
-    def evaluate(self, h, g, triplets_tail, triplets_tail_type):
+        input_fc = out_conv.squeeze(-1).view(batch_size, -1)
+        output = self.fc_layer(input_fc)
+        return output
+
+    def evaluate(self, h, g, edge_idx, batch_type):
         with torch.no_grad():
             self.eval()
-            scores = torch.detach(self(h, g, triplets_tail, triplets_tail_type).cpu()).numpy()
+            row, col = edge_idx
+            conv_input = torch.stack([h[row], g[batch_type], h[col]], dim=1).to(self.dev)
+
+            scores = torch.detach(self(conv_input).view(-1).cpu()).numpy()
         return scores
-
-    def forward(self, h, g, edge_idx, edge_type):
-        row, col = edge_idx
-
-        h = torch.cat([h[row][:, None, :], h[col][:, None, :], g[edge_type][:, None, :]], dim=1)[:, None, :, :]
-
-        h = self.conv(h).squeeze()
-        h = torch.relu(h)
-        h = self.dropout(h)
-        h = h.view(-1, self.channels * self.input_size)
-
-        h = self.weight(h).squeeze()
-
-        return h
