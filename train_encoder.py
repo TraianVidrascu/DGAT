@@ -110,7 +110,7 @@ def train_encoder(args, model, data_loader):
             loss_epoch += loss.item() / no_batch
         scheduler.step()
         save_best(model, loss_epoch, epoch + 1, ENCODER_FILE, asc=False)
-
+        torch.cuda.empty_cache()
         if (epoch + 1) % eval == 0:
             model.eval()
             h_prime, g_prime = model(x, g, pos_edge_idx, pos_edge_type)
