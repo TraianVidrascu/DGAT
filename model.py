@@ -160,8 +160,8 @@ class DKBATNet(nn.Module):
         self.outbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads,
                                                               device=device)
 
-        self.entity_layer = EntityLayer(x_size, heads, hidden_size, device)
-        self.relation_layer = RelationLayer(g_size, heads * hidden_size, device)
+        self.entity_layer = EntityLayer(x_size, heads, output_size, device)
+        self.relation_layer = RelationLayer(g_size, output_size, device)
 
         self.loss_fct = nn.MarginRankingLoss(margin=margin)
 
@@ -199,7 +199,7 @@ class DKBATNet(nn.Module):
         return scores
 
     def _merge_heads(self, h):
-        self.h = torch.sum(h, dim=1) / self.heads
+        h = torch.sum(h, dim=1) / self.heads
         return h
 
     def forward(self, x, g, edge_idx, edge_type):
@@ -215,6 +215,8 @@ class DKBATNet(nn.Module):
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
         h = self._concat(h)
+
+        torch.cuda.empty_cache()
 
         h_inbound = self.inbound_output_layer(h, g, edge_idx, edge_type)
         h_outbound = self.outbound_output_layer(h, g, outbound_edge_idx, edge_type)
