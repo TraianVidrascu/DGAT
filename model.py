@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 from torch_scatter import scatter_add
 
 
@@ -130,10 +130,6 @@ class EntityLayer(nn.Module):
     def forward(self, x, h):
         h_prime = self.weights_ent(x)[:, None, :] + h
 
-        # concat representations
-        h_prime = torch.cat([h_prime[:, i, :] for i in range(self.heads)], dim=1)
-        h_prime = torch.tanh(h_prime)
-
         return h_prime
 
 
@@ -153,6 +149,79 @@ class RelationLayer(nn.Module):
         return g_prime
 
 
+class DKBAT(nn.Module):
+    def __init__(self, x_size, g_size, hidden_size, output_size, heads, alpha=0.5, margin=1, device='cpu'):
+        super(DKBAT, self).__init__()
+        self.inbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
+        self.outbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
+
+        self.inbound_output_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
+        self.outbound_output_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
+
+        self.entity_layer = EntityLayer(x_size, heads, hidden_size, device)
+        self.relation_layer = RelationLayer(g_size, heads * hidden_size, device)
+
+        self.loss_fct = nn.MarginRankingLoss(margin=margin)
+
+        self.heads = heads
+        self.output_size = output_size
+        self.hidden_size = hidden_size
+        self.alpha = alpha
+
+        self.device = device
+        self.to(device)
+
+        self.actv = nn.LeakyReLU()
+
+    def _dissimilarity(self, h, g, edge_idx, edge_type):
+        row, col = edge_idx
+        d_norm = torch.norm(h[row] + g[edge_type] - h[col], p=1, dim=1)
+        return d_norm
+
+    def _concat(self, h):
+        h = torch.cat([h[:, i, :] for i in range(self.heads)], dim=1)
+        return h
+
+    def loss(self, h_prime, g_prime, pos_edge_idx, pos_edge_type, neg_edge_idx, neg_edge_type):
+        # Margin loss
+        d_pos = self._dissimilarity(h_prime, g_prime, pos_edge_idx, pos_edge_type)
+        d_neg = self._dissimilarity(h_prime, g_prime, neg_edge_idx, neg_edge_type)
+        y = torch.ones(d_pos.shape[0]).to(d_pos.device)
+        loss = self.loss_fct(d_pos, d_neg, y)
+        return loss
+
+    def evaluate(self, h, g, triplets_tail, triplets_tail_type):
+        with torch.no_grad():
+            self.eval()
+            scores = torch.detach(self._dissimilarity(h, g, triplets_tail, triplets_tail_type).cpu()).numpy()
+        return scores
+
+    def _merge_heads(self, h):
+        self.h = torch.sum(h, dim=1) / self.heads
+        return h
+
+    def forward(self, x, g, edge_idx, edge_type):
+        row, col = edge_idx
+        outbound_edge_idx = torch.stack([col, row])
+
+        h_inbound = self.inbound_input_layer(x, g, edge_idx, edge_type)
+        h_outbound = self.outbound_input_layer(x, g, outbound_edge_idx, edge_type)
+        h = self.alpha * h_inbound + (1 - self.alpha) * h_outbound
+        h = self._concat(h)
+        h = self.actv(h)
+
+        h_inbound = self.inbound_output_layer(h, g, edge_idx, edge_type)
+        h_outbound = self.outbound_output_layer(h, g, outbound_edge_idx, edge_type)
+        h = self.alpha * h_inbound + (1 - self.alpha) * h_outbound
+        h = self.actv(h)
+
+        h_prime = self.output_entity_layer(x, h).view(-1, self.heads * self.output_size)
+        h_prime = self._merge_heads(h_prime)
+        g_prime = self.output_relation_layer(g)
+
+        return h_prime, g_prime
+
+
 class KBNet(nn.Module):
     def __init__(self, x_size, g_size, hidden_size, output_size, heads, margin=1, device='cpu'):
         super(KBNet, self).__init__()
@@ -160,10 +229,11 @@ class KBNet(nn.Module):
         self.input_entity_layer = EntityLayer(x_size, heads, hidden_size, device)
         self.input_relation_layer = RelationLayer(g_size, heads * hidden_size, device)
 
-        self.output_layer = RelationalAttentionLayer(heads * hidden_size, heads * hidden_size, output_size, heads,
+        self.output_layer = RelationalAttentionLayer(heads * hidden_size, g_size, output_size, heads,
                                                      device=device)
-        self.output_entity_layer = EntityLayer(x_size, heads, output_size, device)
-        self.output_relation_layer = RelationLayer(heads * hidden_size, heads * output_size, device)
+
+        self.entity_layer = EntityLayer(x_size, heads, output_size, device)
+        self.relation_layer = RelationLayer(g_size, output_size, device)
 
         self.loss_fct = nn.MarginRankingLoss(margin=margin)
 
@@ -173,6 +243,8 @@ class KBNet(nn.Module):
 
         self.device = device
         self.to(device)
+
+        self.actv = nn.LeakyReLU()
 
     def _dissimilarity(self, h, g, edge_idx, edge_type):
         row, col = edge_idx
@@ -193,16 +265,30 @@ class KBNet(nn.Module):
             scores = torch.detach(self._dissimilarity(h, g, triplets_tail, triplets_tail_type).cpu()).numpy()
         return scores
 
+    def _merge_heads(self, h):
+        h = torch.sum(h, dim=1) / self.heads
+        return h
+
+    def _concat(self, h):
+        h = torch.cat([h[:, i, :] for i in range(self.heads)], dim=1)
+        return h
+
     def forward(self, x, g, edge_idx, edge_type):
         h = self.input_layer(x, g, edge_idx, edge_type)
-        h_prime = self.input_entity_layer(x, h).view(-1, self.heads * self.hidden_size)
-        g = self.input_relation_layer(g)
+        h = self.actv(h)
+        h = F.normalize(h, p=1, dim=2)
+        h = self._concat(h)
 
-        h = self.output_layer(h_prime, g, edge_idx, edge_type)
-        h_prime = self.output_entity_layer(x, h).view(-1, self.heads * self.output_size)
-        g = self.output_relation_layer(g)
+        h = self.output_layer(h, g, edge_idx, edge_type)
+        h = self.actv(h)
+        h = F.normalize(h, p=1, dim=2)
 
-        return h_prime, g
+        h_prime = self.entity_layer(x, h)
+        g_prime = self.relation_layer(g)
+
+        h_prime = self._merge_heads(h_prime)
+
+        return h_prime, g_prime
 
 
 # class ConvKB(nn.Module):
@@ -246,7 +332,7 @@ class KBNet(nn.Module):
 #         return h
 
 class ConvKB(nn.Module):
-    def __init__(self, input_dim, input_seq_len, in_channels, out_channels, drop_prob,dev='cpu'):
+    def __init__(self, input_dim, input_seq_len, in_channels, out_channels, drop_prob, dev='cpu'):
         super().__init__()
 
         self.conv_layer = nn.Conv2d(
@@ -259,6 +345,7 @@ class ConvKB(nn.Module):
         nn.init.xavier_uniform_(self.conv_layer.weight, gain=1.414)
         self.dev = dev
         self.to(dev)
+
     def forward(self, conv_input):
         batch_size, length, dim = conv_input.size()
         # assuming inputs are of the form ->

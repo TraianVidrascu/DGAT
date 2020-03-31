@@ -168,17 +168,17 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=100, help="After how many epochs to evaluate.")
+    parser.add_argument("--eval", type=int, default=500, help="After how many epochs to evaluate.")
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
-    parser.add_argument("--dataset", type=str, default='WN18RR', help="Dataset used for training.")
+    parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
 
     # objective function parameters
-    parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
+    parser.add_argument("--margin", type=int, default=2, help="Margin for loss function.")
 
     # encoder parameters
     parser.add_argument("--negative_slope", type=float, default=0.2, help="Negative slope for Leaky Relu")
