@@ -33,8 +33,8 @@ class DataLoader:
         x, g, graph = self.dataset.load_fold('test', dev)
         return x, g, graph
 
-    def load_embedding(self, data, dev='cpu'):
-        h, g = self.dataset.load_embedding(dev)
+    def load_embedding(self, model_name, dev='cpu'):
+        h, g = self.dataset.load_embedding(model_name, dev)
         return h, g
 
     # def split_unseen(self, graph, dev='cpu'):

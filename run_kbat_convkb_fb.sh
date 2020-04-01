@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=DGAT_decoder
+#SBATCH --job-name=KBAT_ConvKB_fb
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=3
 #SBATCH --ntasks-per-node=1
@@ -11,5 +11,5 @@
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
 
 conda activate dgat
-python train_decoder.py --batch_size 32000 --eval 200 --epochs 200 --dataset FB15k-237
+python train_decoder.py --model KBAT --batch_size 32000 --eval 200 --epochs 200 --dataset FB15k-237
 

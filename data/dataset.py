@@ -10,10 +10,11 @@ from dataloader import DataLoader
 
 
 class Dataset:
-    def __init__(self, raw_dir, processed_dir, eval_dir):
+    def __init__(self, raw_dir, processed_dir, eval_dir, run_dir):
         self.raw_dir = raw_dir
         self.processed_dir = processed_dir
         self.eval_dir = eval_dir
+        self.run_dir = run_dir
         self.n = -1
         self.k = -1
         self.paths = []
@@ -85,9 +86,9 @@ class Dataset:
         graph = self.load_graph(fold)
         return x, g, graph
 
-    def load_embedding(self, dev='cpu'):
-        path_h = osp.join(self.processed_dir, 'h.pt')
-        path_g = osp.join(self.processed_dir, 'g.pt')
+    def load_embedding(self, model_name, dev='cpu'):
+        path_h = osp.join(self.run_dir, 'h_' + model_name + '.pt')
+        path_g = osp.join(self.run_dir, 'g_' + model_name + '.pt')
         h = torch.load(path_h).to(dev)
         g = torch.load(path_g).to(dev)
         return h, g
@@ -138,11 +139,7 @@ class Dataset:
         g, rel_mapper = self.read_relations()
         self.read_edges(node_mapper, rel_mapper)
         self.save_paths(2)
-        # self.save_paths(3)
-        # self.save_paths(4)
-        # self.save_paths(5)
-
-        # self.save_triplets_raw()
+        self.save_triplets_raw()
 
     def save_evaluation_triplets_raw(self, fold, head=True, dev='cpu'):
         x, g, graph = self.load_fold(fold, dev)
@@ -218,7 +215,6 @@ class Dataset:
         nodes = graph.nodes()
         columns = ['x'] + ['g_' + str(i) for i in range(1, depth + 1)] + ['y']
 
-        executor = concurrent.futures.ProcessPoolExecutor()
         for node in nodes:
             self.dfs_path(graph, [], node, -1, depth)
             print('Launched: ' + str(node) + ' depth: ' + str(depth))
@@ -229,7 +225,8 @@ class Dataset:
 
 class FB15Dataset(Dataset):
     def __init__(self):
-        super().__init__('./data/FB15k-237/raw/', './data/FB15k-237/processed/', './data/FB15k-237/evaluation/')
+        super().__init__('./data/FB15k-237/raw/', './data/FB15k-237/processed/', './data/FB15k-237/evaluation/',
+                         './data/FB15k-237/run/')
         self.n = 14541
         self.k = 237
         self.size_x = 100
@@ -239,7 +236,8 @@ class FB15Dataset(Dataset):
 
 class WN18RR(Dataset):
     def __init__(self):
-        super().__init__('./data/WN18RR/raw/', './data/WN18RR/processed/', './data/WN18RR/evaluation/')
+        super().__init__('./data/WN18RR/raw/', './data/WN18RR/processed/', './data/WN18RR/evaluation/',
+                         './data/WN18RR/run/')
         self.n = 40943
         self.k = 11
         self.size_x = 50

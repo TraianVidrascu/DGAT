@@ -38,9 +38,10 @@ def train_decoder(args, decoder, data_loader):
     epochs = args.epochs
     eval = args.eval
     batch_size = args.batch_size
+    model = args.model
 
     _, _, graph = data_loader.load_train('cpu')
-    h, g = data_loader.load_embedding('cpu')
+    h, g = data_loader.load_embedding(model, 'cpu')
 
     first = 0
     # if args.checkpoint:
@@ -147,7 +148,7 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=25, help="After how many epochs to evaluate.")
+    parser.add_argument("--eval", type=int, default=200, help="After how many epochs to evaluate.")
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=200, help="Number of training epochs for decoder.")
@@ -157,18 +158,18 @@ def main():
     parser.add_argument("--batch_size", type=int, default=16000, help="Batch size for decoder.")
     parser.add_argument("--negative-ratio", type=int, default=40, help="Number of negative samples.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
-
+    parser.add_argument("--model", type=str, default='KBAT', help="Which model's embedding to use.")
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
 
     # decoder parameters
     parser.add_argument("--channels", type=int, default=50, help="Number of channels for decoder.")
-    parser.add_argument("--output_encoder", type=int, default=400, help="Number of neurons per output layer")
+    parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
 
     args, cmdline_args = parser.parse_known_args()
 
     # set up weights adn biases
-    wandb.init(project="KBAT_decoder", config=args)
+    wandb.init(project=args.model + "_ConvKB", config=args)
 
     # load dataset
     if args.dataset == 'FB15k-237':
@@ -181,16 +182,13 @@ def main():
     decoder = get_decoder(args)
 
     # train decoder model
-    #train_decoder(args, decoder, data_loader)
+    train_decoder(args, decoder, data_loader)
     print('done training!')
 
-    h, g = data_loader.load_embedding()
+    h, g = data_loader.load_embedding(args.model)
     # Evaluate test and valid fold after training is done
     metrics = get_decoder_metrics(decoder, h, g, data_loader, 'test', args.device)
     print('done eval test!')
-    wandb.log(metrics)
-    metrics = get_decoder_metrics(decoder, h, g, data_loader, 'valid', args.device)
-    print('done eval valid!')
     wandb.log(metrics)
 
 
