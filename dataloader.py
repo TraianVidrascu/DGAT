@@ -33,7 +33,7 @@ class DataLoader:
         x, g, graph = self.dataset.load_fold('test', dev)
         return x, g, graph
 
-    def load_embedding(self, dev='cpu'):
+    def load_embedding(self, data, dev='cpu'):
         h, g = self.dataset.load_embedding(dev)
         return h, g
 

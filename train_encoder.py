@@ -195,7 +195,7 @@ def main():
     parser.add_argument("--hidden_encoder", type=int, default=200, help="Number of neurons per hidden layer")
     parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
     parser.add_argument("--alpha", type=float, default=0.5, help="Inbound neighborhood importance.")
-    parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
+    parser.add_argument("--model", type=str, default=KBAT, help='Model name')
 
     args, cmdline_args = parser.parse_known_args()
 

@@ -181,7 +181,7 @@ def main():
     decoder = get_decoder(args)
 
     # train decoder model
-    train_decoder(args, decoder, data_loader)
+    #train_decoder(args, decoder, data_loader)
     print('done training!')
 
     h, g = data_loader.load_embedding()
