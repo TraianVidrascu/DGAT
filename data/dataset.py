@@ -87,6 +87,7 @@ class Dataset:
         return x, g, graph
 
     def load_embedding(self, model_name, dev='cpu'):
+        model_name = model_name.lower()
         path_h = osp.join(self.run_dir, 'h_' + model_name + '.pt')
         path_g = osp.join(self.run_dir, 'g_' + model_name + '.pt')
         h = torch.load(path_h).to(dev)
