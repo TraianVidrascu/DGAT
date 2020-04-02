@@ -149,16 +149,37 @@ class RelationLayer(nn.Module):
         return g_prime
 
 
+class AlphaLayer(nn.Module):
+    def __init__(self, h_size, device='cpu'):
+        super(AlphaLayer, self).__init__()
+        self.alpha = nn.Linear(2 * h_size, 1)
+        self.actv = nn.Sigmoid()
+
+        self.init_params()
+        self.to(device)
+
+    def init_params(self):
+        nn.init.xavier_normal_(self.alpha.weight, gain=1.414)
+
+    def forward(self, h_inbound, h_outbound):
+        h_all = torch.cat([h_inbound, h_outbound], dim=2)
+        alpha = self.alpha(h_all)
+        alpha = self.actv(alpha)
+        return alpha
+
+
 class DKBATNet(nn.Module):
     def __init__(self, x_size, g_size, hidden_size, output_size, heads, alpha=0.5, margin=1, device='cpu'):
         super(DKBATNet, self).__init__()
         self.inbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
         self.outbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
+        self.alpha_input = AlphaLayer(hidden_size)
 
         self.inbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads,
                                                              device=device)
         self.outbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads,
                                                               device=device)
+        self.alpha_output = AlphaLayer(output_size)
 
         self.entity_layer = EntityLayer(x_size, heads, output_size, device)
         self.relation_layer = RelationLayer(g_size, output_size, device)
@@ -211,7 +232,8 @@ class DKBATNet(nn.Module):
 
         h_inbound = self.inbound_input_layer(x, g, edge_idx, edge_type)
         h_outbound = self.outbound_input_layer(x, g, outbound_edge_idx, edge_type)
-        h = self.alpha * h_inbound + (1 - self.alpha) * h_outbound
+        alpha = self.alpha_input(h_inbound, h_outbound)
+        h = alpha * h_inbound + (1 - alpha) * h_outbound
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
         h = self._concat(h)
@@ -220,7 +242,8 @@ class DKBATNet(nn.Module):
 
         h_inbound = self.inbound_output_layer(h, g, edge_idx, edge_type)
         h_outbound = self.outbound_output_layer(h, g, outbound_edge_idx, edge_type)
-        h = self.alpha * h_inbound + (1 - self.alpha) * h_outbound
+        alpha = self.alpha_input(h_inbound, h_outbound)
+        h = alpha * h_inbound + (1 - alpha) * h_outbound
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
 
