@@ -11,5 +11,5 @@
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
 
 conda activate dgat
-python train_decoder.py --model KBAT --batch_size 128 --negative-ratio 40 --eval 200 --epochs 200 --dataset FB15k-237
+python train_decoder.py --model KBAT --dropout 0.3 --batch_size 128 --negative-ratio 40 --eval 200 --epochs 200 --dataset FB15k-237
 

@@ -73,7 +73,6 @@ def train_decoder(args, decoder, data_loader):
             neg_batch_idx, neg_batch_type = data_loader.negative_samples(n, pos_batch_idx, pos_batch_type,
                                                                          negative_ratio,
                                                                          'cpu')
-            neg_batch_idx, neg_batch_type = data_loader.shuffle_samples(neg_batch_idx, neg_batch_type)
 
             # combine positive and negative batch
             no_pos = pos_batch_idx.shape[1]
