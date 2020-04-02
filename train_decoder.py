@@ -57,43 +57,50 @@ def train_decoder(args, decoder, data_loader):
     criterion = torch.nn.SoftMarginLoss()
     for epoch in range(first, epochs):
         decoder.train()
-        neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio,
-                                                                   'cpu')
 
-        m_neg = neg_edge_idx.shape[1]
-
-        # input and target ( positive and negative samples
-        target = torch.cat([torch.ones(m), -torch.ones(m_neg)])
-        edge_idx = torch.cat([pos_edge_idx, neg_edge_idx], dim=1)
-        edge_type = torch.cat([pos_edge_type, neg_edge_type])
-
-        # shuffle pos and negative samples
-        edge_idx, edge_type = data_loader.shuffle_samples(edge_idx, edge_type)
-        total_size = edge_idx.shape[1]
-
-        iteration = torch.randperm(total_size).to(dev)
+        # defining an iteration
+        iteration = torch.randperm(m).to(dev)
         loss_epoch = 0
-        no_batch = int(total_size / batch_size)
-        batch_idx = 0
-        for itt in range(0, total_size, batch_size):
-            batch = iteration[itt:itt + batch_size]
-            row, col = edge_idx[:, batch]
-            batch_type = edge_type[batch]
+        no_batch = int(m / batch_size)
+        batch_counter = 0
 
+        for itt in range(0, m, batch_size):
+            batch = iteration[itt:itt + batch_size]
+            pos_batch_idx = pos_edge_idx[:, batch]
+            pos_batch_type = pos_edge_type[batch]
+
+            # generate invalid batch triplets
+            neg_batch_idx, neg_batch_type = data_loader.negative_samples(n, pos_batch_idx, pos_batch_type,
+                                                                         negative_ratio,
+                                                                         'cpu')
+            neg_batch_idx, neg_batch_type = data_loader.shuffle_samples(neg_batch_idx, neg_batch_type)
+
+            # combine positive and negative batch
+            no_pos = pos_batch_idx.shape[1]
+            no_neg = neg_batch_idx.shape[1]
+
+            target_batch = torch.cat([torch.ones(no_pos), -torch.ones(no_neg)])
+            batch_idx = torch.cat([pos_batch_idx, neg_batch_idx], dim=1)
+            batch_type = torch.cat([pos_batch_type, neg_batch_type])
+            row, col = batch_idx
+
+            # prepare input
             conv_input = torch.stack([h[row], g[batch_type], h[col]], dim=1).to(dev)
 
+            # forward input
             prediction = decoder(conv_input)
 
-            loss = criterion(prediction.squeeze(-1), target[batch].to(dev))
+            # compute loss
+            loss = criterion(prediction.squeeze(-1), target_batch.to(dev))
 
             # optimization
             optim.zero_grad()
             loss.backward()
             optim.step()
             loss_epoch += loss.item() / no_batch
-            batch_idx += 1
+            batch_counter += 1
             print('Epoch:%3.d ' % epoch +
-                  'Iteration:%3.d ' % batch_idx +
+                  'Iteration:%3.d ' % batch_counter +
                   'Loss iteration:%.4f ' % loss.item())
             del prediction, loss
             torch.cuda.empty_cache()
@@ -155,7 +162,7 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay decoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
-    parser.add_argument("--batch_size", type=int, default=16000, help="Batch size for decoder.")
+    parser.add_argument("--batch_size", type=int, default=128, help="Batch size for decoder.")
     parser.add_argument("--negative-ratio", type=int, default=40, help="Number of negative samples.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
     parser.add_argument("--model", type=str, default='KBAT', help="Which model's embedding to use.")
