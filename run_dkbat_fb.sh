@@ -11,4 +11,4 @@
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
 
 conda activate dgat
-python train_encoder.py --model DKBAT --dataset FB15k-237
+python train_encoder.py --model DKBAT --dataset FB15k-237 --margin 1
