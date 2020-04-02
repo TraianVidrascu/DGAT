@@ -95,28 +95,25 @@ class DataLoader:
         return triplets, lists
 
     def negative_samples(self, n, edge_idx, edge_type, negative_ratio, dev='cpu'):
-        ratio = int(negative_ratio / 2)
 
-        edge_idx_aux = edge_idx.repeat((1, ratio))
+        edge_idx_aux = edge_idx.repeat((1, negative_ratio))
         row, col = edge_idx_aux
         m = row.shape[0]
 
-        edge_type_aux = edge_type.repeat(ratio)
+        neg_type = edge_type.repeat(negative_ratio)
 
         # corrupt head triplet
         head_corrupted = torch.randint(size=(m,), high=n).to(dev)
         head_corrupted[row == head_corrupted] = (head_corrupted[row == head_corrupted] + 1) % n
-        head_corrupted_idx_type = torch.stack([head_corrupted, col, edge_type_aux])
 
         # corrupt tail triplet
         tail_corrupted = torch.randint(size=(m,), high=n).to(dev)
         tail_corrupted[col == tail_corrupted] = (tail_corrupted[col == tail_corrupted] + 1) % n
-        tail_corrupted_idx_type = torch.stack([row, tail_corrupted, edge_type_aux])
 
-        # negative samples
-        neg_idx_type = torch.cat([head_corrupted_idx_type, tail_corrupted_idx_type], dim=1)
+        # negative samples, bernoulli sample tail or head
+        sample = (torch.rand(size=(m,)) > 0.5).long()
+        neg_idx = edge_idx_aux
+        neg_idx[0, sample == 0] = head_corrupted[sample == 0]
+        neg_idx[1, sample == 1] = tail_corrupted[sample == 1]
 
-        neg_idx = neg_idx_type[0:2, :]
-        neg_type = neg_idx_type[2, :]
-
-        return neg_idx, neg_type
+        return neg_idx.to(dev), neg_type.to(dev)
