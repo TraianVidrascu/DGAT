@@ -68,12 +68,13 @@ def train_encoder(args, model, data_loader):
     pos_edge_idx_aux = pos_edge_idx.repeat((1, negative_ratio))
     pos_edge_type_aux = pos_edge_type.repeat((1, negative_ratio))
 
-    batch_size = train_idx.shape[1]
+    batch_size = train_idx.shape[1] * 5 # for cluster
 
     for epoch in range(first, epochs):
         model.train()
 
-        neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio, 'cpu')
+        neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio,
+                                                                   'cpu')
 
         # shuffling
         perm = torch.randperm(pos_edge_type_aux.shape[1])
