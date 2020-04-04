@@ -62,7 +62,7 @@ def train_encoder(args, model, data_loader):
     optim = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=500, gamma=0.5, last_epoch=-1)
 
-    pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, path=use_paths, dev=dev)
+    train_idx, train_type, pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, path=use_paths, dev=dev)
     n = x.shape[0]
 
     pos_edge_idx_aux = pos_edge_idx.repeat((1, negative_ratio))
@@ -90,7 +90,7 @@ def train_encoder(args, model, data_loader):
         for itt in range(0, m, batch_size):
             batch = iterations[itt:itt + batch_size]
 
-            h_prime, g_prime = model(x, g, pos_edge_idx, pos_edge_type)
+            h_prime, g_prime = model(x, g, train_idx, train_type)
 
             pos_edge_idx_batch = pos_edge_idx_aux[:, batch]
             pos_edge_type_batch = pos_edge_type_aux[:, batch]
@@ -187,7 +187,7 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
-    parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
+    parser.add_argument("--dataset", type=str, default='WN18RR', help="Dataset used for training.")
     parser.add_argument("--paths", type=bool, default=True, help="Use 2-hop paths for training.")
 
     # objective function parameters
