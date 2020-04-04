@@ -271,10 +271,3 @@ from dataloader import DataLoader
 # tensor = torch.randn((2,10))
 # my_list = tensor.tolist()
 # print(my_list)
-
-dataset = FB15Dataset()
-
-dataset.pre_process()
-dataset = WN18RR()
-
-dataset.pre_process()

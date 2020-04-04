@@ -53,23 +53,21 @@ class RelationalAttentionLayer(nn.Module):
 
         return edge_softmax
 
-    def _aggregate(self, edge_idx, alpha, c_ijk):
-        cols = edge_idx[1, :]
+    def _aggregate(self, end_nodes, alpha, c_ijk):
         a = alpha * c_ijk
 
         # add self edges
         a = torch.cat([a, self.self_edges], dim=0)
-        cols = torch.cat([cols, self.self_edge_mask])
+        end_nodes = torch.cat([end_nodes, self.self_edge_mask])
 
-        h = scatter_add(a, cols, dim=0)
+        h = scatter_add(a, end_nodes, dim=0)
         return h
 
-    def _attention(self, c_ijk, edge_idx):
+    def _attention(self, c_ijk, end_nodes):
         a_ijk = torch.sum(self.weights_att * c_ijk, dim=2)[:, :, None]
         b_ijk = self.att_actv(a_ijk)
 
-        rows = edge_idx[0, :]
-        alpha = RelationalAttentionLayer._sofmax(rows, b_ijk)
+        alpha = RelationalAttentionLayer._sofmax(end_nodes, b_ijk)
 
         alpha = self.dropout(alpha)
         return alpha
@@ -80,7 +78,14 @@ class RelationalAttentionLayer(nn.Module):
         # extract embeddings for entities and relations
         h_i = h[row]
         h_j = h[col]
-        g_k = g[edge_type]
+
+        # add zero embeddings for paths of only one hop
+        g_size = g.shape[1]
+        g_zeros = torch.zeros((1, g_size)).float().to(g.device)
+        g_aux = torch.cat([g, g_zeros], dim=0)
+
+        k_1, k2 = edge_type
+        g_k = g_aux[k_1] + g_aux[k2]
 
         # concatenate the 3 representations
         h_ijk = torch.cat([h_i, h_j, g_k], dim=1)
@@ -103,15 +108,16 @@ class RelationalAttentionLayer(nn.Module):
         # self edges
         n = h.shape[0]
         self._self_edges_mask(n)
+        end_nodes = edge_idx[1, :]
 
         # compute edge embeddings
         c_ijk = self._compute_edges(edge_idx, edge_type, h, g)
 
         # compute edge attention
-        alpha = self._attention(c_ijk, edge_idx)
+        alpha = self._attention(c_ijk, end_nodes)
 
         # aggregate node representation
-        h = self._aggregate(edge_idx, alpha, c_ijk)
+        h = self._aggregate(end_nodes, alpha, c_ijk)
         return h
 
 
@@ -168,7 +174,47 @@ class AlphaLayer(nn.Module):
         return alpha
 
 
-class DKBATNet(nn.Module):
+class KB(nn.Module):
+    def __init__(self):
+        super(KB, self).__init__()
+
+    @staticmethod
+    def _dissimilarity(h, g, edge_idx, edge_type):
+        row, col = edge_idx
+
+        g_size = g.shape[1]
+        g_zeros = torch.zeros((1, g_size)).float().to(g.device)
+        g_aux = torch.cat([g, g_zeros], dim=0)
+
+        k_1, k2 = edge_type
+
+        d_norm = torch.norm(h[row] + g_aux[k_1] + g_aux[k2] - h[col], p=1, dim=1)
+        return d_norm
+
+    def loss(self, h_prime, g_prime, pos_edge_idx, pos_edge_type, neg_edge_idx, neg_edge_type):
+        # Margin loss
+        d_pos = KB._dissimilarity(h_prime, g_prime, pos_edge_idx, pos_edge_type)
+        d_neg = KB._dissimilarity(h_prime, g_prime, neg_edge_idx, neg_edge_type)
+        y = torch.ones(d_pos.shape[0]).to(d_pos.device)
+        loss = self.loss_fct(d_pos, d_neg, y)
+        return loss
+
+    def evaluate(self, h, g, triplets, triplets_type):
+        with torch.no_grad():
+            self.eval()
+            scores = torch.detach(KB._dissimilarity(h, g, triplets, triplets_type).cpu()).numpy()
+        return scores
+
+    def _merge_heads(self, h):
+        h = torch.sum(h, dim=1) / self.heads
+        return h
+
+    def _concat(self, h):
+        h = torch.cat([h[:, i, :] for i in range(self.heads)], dim=1)
+        return h
+
+
+class DKBATNet(KB):
     def __init__(self, x_size, g_size, hidden_size, output_size, heads, alpha=0.5, margin=1, device='cpu'):
         super(DKBATNet, self).__init__()
         self.inbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
@@ -195,33 +241,6 @@ class DKBATNet(nn.Module):
         self.to(device)
 
         self.actv = nn.LeakyReLU()
-
-    def _dissimilarity(self, h, g, edge_idx, edge_type):
-        row, col = edge_idx
-        d_norm = torch.norm(h[row] + g[edge_type] - h[col], p=1, dim=1)
-        return d_norm
-
-    def _concat(self, h):
-        h = torch.cat([h[:, i, :] for i in range(self.heads)], dim=1)
-        return h
-
-    def loss(self, h_prime, g_prime, pos_edge_idx, pos_edge_type, neg_edge_idx, neg_edge_type):
-        # Margin loss
-        d_pos = self._dissimilarity(h_prime, g_prime, pos_edge_idx, pos_edge_type)
-        d_neg = self._dissimilarity(h_prime, g_prime, neg_edge_idx, neg_edge_type)
-        y = torch.ones(d_pos.shape[0]).to(d_pos.device)
-        loss = self.loss_fct(d_pos, d_neg, y)
-        return loss
-
-    def evaluate(self, h, g, triplets_tail, triplets_tail_type):
-        with torch.no_grad():
-            self.eval()
-            scores = torch.detach(self._dissimilarity(h, g, triplets_tail, triplets_tail_type).cpu()).numpy()
-        return scores
-
-    def _merge_heads(self, h):
-        h = torch.sum(h, dim=1) / self.heads
-        return h
 
     def forward(self, x, g, edge_idx, edge_type):
         x = F.normalize(x, p=2, dim=1).detach()
@@ -256,7 +275,7 @@ class DKBATNet(nn.Module):
         return h_prime, g_prime
 
 
-class KBNet(nn.Module):
+class KBNet(KB):
     def __init__(self, x_size, g_size, hidden_size, output_size, heads, margin=1, device='cpu'):
         super(KBNet, self).__init__()
         self.input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device=device)
@@ -279,33 +298,6 @@ class KBNet(nn.Module):
         self.to(device)
 
         self.actv = nn.LeakyReLU()
-
-    def _dissimilarity(self, h, g, edge_idx, edge_type):
-        row, col = edge_idx
-        d_norm = torch.norm(h[row] + g[edge_type] - h[col], p=1, dim=1)
-        return d_norm
-
-    def loss(self, h_prime, g_prime, pos_edge_idx, pos_edge_type, neg_edge_idx, neg_edge_type):
-        # Margin loss
-        d_pos = self._dissimilarity(h_prime, g_prime, pos_edge_idx, pos_edge_type)
-        d_neg = self._dissimilarity(h_prime, g_prime, neg_edge_idx, neg_edge_type)
-        y = torch.ones(d_pos.shape[0]).to(d_pos.device)
-        loss = self.loss_fct(d_pos, d_neg, y)
-        return loss
-
-    def evaluate(self, h, g, triplets_tail, triplets_tail_type):
-        with torch.no_grad():
-            self.eval()
-            scores = torch.detach(self._dissimilarity(h, g, triplets_tail, triplets_tail_type).cpu()).numpy()
-        return scores
-
-    def _merge_heads(self, h):
-        h = torch.sum(h, dim=1) / self.heads
-        return h
-
-    def _concat(self, h):
-        h = torch.cat([h[:, i, :] for i in range(self.heads)], dim=1)
-        return h
 
     def forward(self, x, g, edge_idx, edge_type):
         x = F.normalize(x, p=2, dim=1).detach()

@@ -197,6 +197,12 @@ class Dataset:
 
         return triplets, lists
 
+    def load_paths(self):
+        path_name = self.processed_dir + 'paths_2.pkl'
+        with open(path_name, 'rb') as handler:
+            paths = pk.load(handler)
+        return paths
+
     def dfs_path(self, graph, path, node, depth, max_depth):
         depth += 1
         if depth == 0:

@@ -1,12 +1,11 @@
 import argparse
 
 import torch
-import numpy as np
 import wandb
 
 from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
-from metrics import get_metrics, rank_triplet, evaluate
+from metrics import get_metrics, evaluate
 from model import KBNet, DKBATNet
 from utilis import save_best, load_model, set_random_seed
 
@@ -48,6 +47,8 @@ def train_encoder(args, model, data_loader):
     lr = args.lr
     decay = args.decay
     epochs = args.epochs
+    use_paths = args.paths
+
     dataset_name = data_loader.get_name()
 
     # load data
@@ -61,11 +62,11 @@ def train_encoder(args, model, data_loader):
     optim = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=500, gamma=0.5, last_epoch=-1)
 
-    pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, dev)
+    pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, path=use_paths, dev=dev)
     n = x.shape[0]
 
     pos_edge_idx_aux = pos_edge_idx.repeat((1, negative_ratio))
-    pos_edge_type_aux = pos_edge_type.repeat(negative_ratio)
+    pos_edge_type_aux = pos_edge_type.repeat((1, negative_ratio))
 
     batch_size = pos_edge_idx.shape[1]
     for epoch in range(first, epochs):
@@ -74,11 +75,11 @@ def train_encoder(args, model, data_loader):
         neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio, dev)
 
         # shuffling
-        perm = torch.randperm(pos_edge_type_aux.shape[0])
+        perm = torch.randperm(pos_edge_type_aux.shape[1])
         pos_edge_idx_aux = pos_edge_idx_aux[:, perm]
-        pos_edge_type_aux = pos_edge_type_aux[perm]
+        pos_edge_type_aux = pos_edge_type_aux[:, perm]
         neg_edge_idx = neg_edge_idx[:, perm]
-        neg_edge_type = neg_edge_type[perm]
+        neg_edge_type = neg_edge_type[:, perm]
 
         m = pos_edge_idx_aux.shape[1]
         iterations = torch.randperm(m)
@@ -92,15 +93,17 @@ def train_encoder(args, model, data_loader):
             h_prime, g_prime = model(x, g, pos_edge_idx, pos_edge_type)
 
             pos_edge_idx_batch = pos_edge_idx_aux[:, batch]
-            pos_edge_type_batch = pos_edge_type_aux[batch]
+            pos_edge_type_batch = pos_edge_type_aux[:, batch]
             neg_edge_idx_batch = neg_edge_idx[:, batch]
-            neg_edge_type_batch = neg_edge_type[batch]
+            neg_edge_type_batch = neg_edge_type[:, batch]
 
             loss = model.loss(h_prime, g_prime,
                               pos_edge_idx_batch,
                               pos_edge_type_batch,
                               neg_edge_idx_batch,
                               neg_edge_type_batch)
+
+            torch.cuda.empty_cache()
 
             # optimization
             optim.zero_grad()
@@ -185,6 +188,7 @@ def main():
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
+    parser.add_argument("--paths", type=bool, default=True, help="Use 2-hop paths for training.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
@@ -195,7 +199,7 @@ def main():
     parser.add_argument("--hidden_encoder", type=int, default=200, help="Number of neurons per hidden layer")
     parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
     parser.add_argument("--alpha", type=float, default=0.5, help="Inbound neighborhood importance.")
-    parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
+    parser.add_argument("--model", type=str, default=KBAT, help='Model name')
 
     args, cmdline_args = parser.parse_known_args()
 

@@ -37,28 +37,30 @@ class DataLoader:
         h, g = self.dataset.load_embedding(model_name, dev)
         return h, g
 
-    # def split_unseen(self, graph, dev='cpu'):
-    #     splitter = EdgeSplitter(graph)
-    #     graph_reduced, edge_idx_unseen, edge_lbl_unseen = splitter.train_test_split(p=0.1,
-    #                                                                                 method=GLOBAL,
-    #                                                                                 probs=PROBS)
-    #     edge_idx_unseen = edge_idx_unseen[edge_lbl_unseen == 1]
-    #
-    #     edge_unseen_type = list(map(lambda x: graph[x[0]][x[1]][0]['label'], edge_idx_unseen))
-    #     edge_unseen_type = torch.tensor(edge_unseen_type).long()
-    #
-    #     edge_idx_unseen = torch.from_numpy(edge_idx_unseen).t()
-    #
-    #     return graph_reduced, edge_idx_unseen.to(dev), edge_unseen_type.to(dev)
+    def load_paths(self):
+        paths = self.dataset.load_paths()
+        row = torch.tensor(paths['x'].values).long()
+        col = torch.tensor(paths['y'].values).long()
+        k_1 = torch.tensor(paths['g_1'].values).long()
+        k_2 = torch.tensor(paths['g_2'].values).long()
 
-    @staticmethod
-    def graph2idx(graph, dev='cpu'):
+        edge_idx = torch.stack([row, col])
+        edge_type = torch.stack([k_1, k_2])
+        return edge_idx, edge_type
+
+    def graph2idx(self, graph, path=True, dev='cpu'):
         edges = list(map(lambda x: [x[0], x[1], x[2]['label']], graph.edges(data=True)))
 
         edges = torch.tensor(edges).long()
         edge_idx = edges[:, 0:2].t()
         edge_type = edges[:, 2]
+        edge_type = torch.stack([edge_type, -torch.ones(edge_type.shape[0]).long()])
 
+        if path:
+            path_idx, path_type = self.load_paths()
+
+            edge_idx = torch.cat([edge_idx, path_idx], dim=1)
+            edge_type = torch.cat([edge_type, path_type], dim=1)
         return edge_idx.to(dev), edge_type.to(dev)
 
     @staticmethod
@@ -100,7 +102,10 @@ class DataLoader:
         row, col = edge_idx_aux
         m = row.shape[0]
 
-        neg_type = edge_type.repeat(negative_ratio)
+        if len(edge_type.shape) == 1:
+            neg_type = edge_type.repeat(negative_ratio)
+        else:
+            neg_type = edge_type.repeat((1, negative_ratio))
 
         # corrupt head triplet
         head_corrupted = torch.randint(size=(m,), high=n).to(dev)

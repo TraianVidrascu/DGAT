@@ -50,7 +50,7 @@ def train_decoder(args, decoder, data_loader):
     optim = torch.optim.Adam(decoder.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=25, gamma=0.5, last_epoch=-1)
 
-    pos_edge_idx, pos_edge_type = DataLoader.graph2idx(graph, 'cpu')
+    pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, path=False, dev='cpu')
     m = pos_edge_idx.shape[1]
     n = h.shape[0]
 
