@@ -62,17 +62,18 @@ def train_encoder(args, model, data_loader):
     optim = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=500, gamma=0.5, last_epoch=-1)
 
-    train_idx, train_type, pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, path=use_paths, dev=dev)
+    train_idx, train_type, pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, path=use_paths, dev='cpu')
     n = x.shape[0]
 
     pos_edge_idx_aux = pos_edge_idx.repeat((1, negative_ratio))
     pos_edge_type_aux = pos_edge_type.repeat((1, negative_ratio))
 
-    batch_size = pos_edge_idx.shape[1]
+    batch_size = train_idx.shape[1]
+
     for epoch in range(first, epochs):
         model.train()
 
-        neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio, dev)
+        neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio, 'cpu')
 
         # shuffling
         perm = torch.randperm(pos_edge_type_aux.shape[1])
@@ -90,12 +91,12 @@ def train_encoder(args, model, data_loader):
         for itt in range(0, m, batch_size):
             batch = iterations[itt:itt + batch_size]
 
-            h_prime, g_prime = model(x, g, train_idx, train_type)
+            h_prime, g_prime = model(x, g, train_idx.to(dev), train_type.to(dev))
 
-            pos_edge_idx_batch = pos_edge_idx_aux[:, batch]
-            pos_edge_type_batch = pos_edge_type_aux[:, batch]
-            neg_edge_idx_batch = neg_edge_idx[:, batch]
-            neg_edge_type_batch = neg_edge_type[:, batch]
+            pos_edge_idx_batch = pos_edge_idx_aux[:, batch].to(dev)
+            pos_edge_type_batch = pos_edge_type_aux[:, batch].to(dev)
+            neg_edge_idx_batch = neg_edge_idx[:, batch].to(dev)
+            neg_edge_type_batch = neg_edge_type[:, batch].to(dev)
 
             loss = model.loss(h_prime, g_prime,
                               pos_edge_idx_batch,
@@ -116,7 +117,7 @@ def train_encoder(args, model, data_loader):
         torch.cuda.empty_cache()
         if (epoch + 1) % eval == 0:
             model.eval()
-            h_prime, g_prime = model(x, g, pos_edge_idx, pos_edge_type)
+            h_prime, g_prime = model(x, g, train_idx.to(dev), train_type.to(dev))
             metrics = get_encoder_metrics(data_loader, h_prime, g_prime, 'valid', model, dev=args.device)
             metrics['train_' + dataset_name + '_Loss_encoder'] = loss_epoch
             wandb.log(metrics)
@@ -187,7 +188,7 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
-    parser.add_argument("--dataset", type=str, default='WN18RR', help="Dataset used for training.")
+    parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
     parser.add_argument("--paths", type=bool, default=True, help="Use 2-hop paths for training.")
 
     # objective function parameters

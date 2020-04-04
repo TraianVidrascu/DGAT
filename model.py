@@ -182,13 +182,16 @@ class KB(nn.Module):
     def _dissimilarity(h, g, edge_idx, edge_type):
         row, col = edge_idx
 
-        g_size = g.shape[1]
-        g_zeros = torch.zeros((1, g_size)).float().to(g.device)
-        g_aux = torch.cat([g, g_zeros], dim=0)
+        if len(edge_type.shape) == 2:
+            g_size = g.shape[1]
+            g_zeros = torch.zeros((1, g_size)).float().to(g.device)
+            g_aux = torch.cat([g, g_zeros], dim=0)
+            k_1, k2 = edge_type
+            g = g_aux[k_1] + g_aux[k2]
+        else:
+            g = g[edge_type]
 
-        k_1, k2 = edge_type
-
-        d_norm = torch.norm(h[row] + g_aux[k_1] + g_aux[k2] - h[col], p=1, dim=1)
+        d_norm = torch.norm(h[row] + g - h[col], p=1, dim=1)
         return d_norm
 
     def loss(self, h_prime, g_prime, pos_edge_idx, pos_edge_type, neg_edge_idx, neg_edge_type):
