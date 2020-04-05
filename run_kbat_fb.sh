@@ -11,4 +11,4 @@
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
 
 conda activate dgat
-python train_encoder.py --debug False --paths --epochs 3000 --step_size 500 True --model KBAT --dataset FB15k-237 --margin 1
+python train_encoder.py --debug False --paths True --epochs 3000 --step_size 500 True --model KBAT --dataset FB15k-237 --margin 1
