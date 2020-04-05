@@ -183,6 +183,7 @@ def main():
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval", type=int, default=500, help="After how many epochs to evaluate.")
+    parser.add_argument("--debug", type=bool, default=True, help="Debugging mod.")
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
@@ -205,9 +206,11 @@ def main():
 
     args, cmdline_args = parser.parse_known_args()
 
-    model_name = args.model
+    model_name = args.model + "_encoder"
     # set up weights and biases
-    wandb.init(project=model_name + "_encoder", config=args)
+    if args.debug:
+        model_name += '_debug'
+    wandb.init(project=model_name, config=args)
 
     if args.dataset == 'FB15k-237':
         dataset = FB15Dataset()
