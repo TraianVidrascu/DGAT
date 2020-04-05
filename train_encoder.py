@@ -68,7 +68,7 @@ def train_encoder(args, model, data_loader):
     pos_edge_idx_aux = pos_edge_idx.repeat((1, negative_ratio))
     pos_edge_type_aux = pos_edge_type.repeat((1, negative_ratio))
 
-    batch_size = train_idx.shape[1] * 5 # for cluster
+    batch_size = train_idx.shape[1] * 5  # for cluster
 
     for epoch in range(first, epochs):
         model.train()
@@ -161,7 +161,7 @@ def embed_nodes(args, encoder, data):
 
     data_loader = DataLoader(data)
     x, g, graph = data_loader.load_train(dev)
-    edge_idx, edge_type = data_loader.graph2idx(graph, dev)
+    edge_idx, edge_type = data_loader.graph2idx(graph, path=False, dev=dev)
 
     encoder.eval()
     with torch.no_grad():
