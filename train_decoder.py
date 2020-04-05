@@ -117,8 +117,8 @@ def train_decoder(args, decoder, data_loader):
             wandb.log({'train_' + dataset_name + '_Loss_decoder': loss_epoch})
 
 
-def load_decoder(args, dev='cuda'):
-    decoder = get_decoder(args, dev)
+def load_decoder(args):
+    decoder = get_decoder(args)
     model, _ = load_model(decoder, DECODER_FILE)
     return model
 

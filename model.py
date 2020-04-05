@@ -262,7 +262,7 @@ class DKBATNet(KB):
 
         h_inbound = self.inbound_output_layer(h, g, edge_idx, edge_type)
         h_outbound = self.outbound_output_layer(h, g, outbound_edge_idx, edge_type)
-        alpha = self.alpha_input(h_inbound, h_outbound)
+        alpha = self.alpha_output(h_inbound, h_outbound)
         h = alpha * h_inbound + (1 - alpha) * h_outbound
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)

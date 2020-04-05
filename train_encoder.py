@@ -1,4 +1,5 @@
 import argparse
+import time
 
 import torch
 import wandb
@@ -47,6 +48,7 @@ def train_encoder(args, model, data_loader):
     lr = args.lr
     decay = args.decay
     epochs = args.epochs
+    step_size = args.step_size
     use_paths = args.paths
 
     dataset_name = data_loader.get_name()
@@ -60,7 +62,7 @@ def train_encoder(args, model, data_loader):
     #     model, first = load_model(model, ENCODER_CHECKPOINT)
 
     optim = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
-    scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=500, gamma=0.5, last_epoch=-1)
+    scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=step_size, gamma=0.5, last_epoch=-1)
 
     train_idx, train_type, pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, path=use_paths, dev='cpu')
     n = x.shape[0]
@@ -68,7 +70,7 @@ def train_encoder(args, model, data_loader):
     pos_edge_idx_aux = pos_edge_idx.repeat((1, negative_ratio))
     pos_edge_type_aux = pos_edge_type.repeat((1, negative_ratio))
 
-    batch_size = train_idx.shape[1] * 7 # for cluster
+    batch_size = train_idx.shape[1] * 5  # for cluster * 5
 
     for epoch in range(first, epochs):
         model.train()
@@ -186,7 +188,8 @@ def main():
     parser.add_argument("--debug", type=bool, default=True, help="Debugging mod.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
+    parser.add_argument("--epochs", type=int, default=2000, help="Number of training epochs for encoder.")
+    parser.add_argument("--step_size", type=int, default=250, help="Step size of scheduler.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
