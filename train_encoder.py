@@ -211,7 +211,7 @@ def main():
 
     model_name = args.model + "_encoder"
     # set up weights and biases
-    if args.debug:
+    if args.debug == 1:
         model_name += '_debug'
     wandb.init(project=model_name, config=args)
 
