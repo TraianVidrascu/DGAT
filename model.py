@@ -187,11 +187,9 @@ class KB(nn.Module):
             g_zeros = torch.zeros((1, g_size)).float().to(g.device)
             g_aux = torch.cat([g, g_zeros], dim=0)
             k_1, k2 = edge_type
-            g = g_aux[k_1] + g_aux[k2]
+            d_norm = torch.norm(h[row] + g_aux[k_1] + g_aux[k2] - h[col], p=1, dim=1)
         else:
-            g = g[edge_type]
-
-        d_norm = torch.norm(h[row] + g - h[col], p=1, dim=1)
+            d_norm = torch.norm(h[row] + g[edge_type] - h[col], p=1, dim=1)
         return d_norm
 
     def loss(self, h_prime, g_prime, pos_edge_idx, pos_edge_type, neg_edge_idx, neg_edge_type):
