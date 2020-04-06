@@ -2,7 +2,9 @@ import argparse
 import time
 
 import torch
+import torch.optim as optim
 import wandb
+from apex import amp
 
 from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
@@ -49,7 +51,7 @@ def train_encoder(args, model, data_loader):
     decay = args.decay
     epochs = args.epochs
     step_size = args.step_size
-    use_paths = args.paths
+    use_paths = True if args.paths == 1 else False
 
     dataset_name = data_loader.get_name()
 
@@ -61,8 +63,11 @@ def train_encoder(args, model, data_loader):
     # if args.checkpoint:
     #     model, first = load_model(model, ENCODER_CHECKPOINT)
 
-    optim = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
-    scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=step_size, gamma=0.5, last_epoch=-1)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=0.5, last_epoch=-1)
+
+    # apex
+    model, optimizer = amp.initialize(model, optimizer, opt_level="O1",)
 
     train_idx, train_type, pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, path=use_paths, dev='cpu')
     n = x.shape[0]
@@ -88,10 +93,11 @@ def train_encoder(args, model, data_loader):
         m = pos_edge_idx_aux.shape[1]
         iterations = torch.randperm(m)
 
-        loss_epoch = 0
-        no_batch = int(m / batch_size)
+        losses_epoch = []
 
+        s_e = time.time()
         for itt in range(0, m, batch_size):
+            s = time.time()
             batch = iterations[itt:itt + batch_size]
 
             h_prime, g_prime = model(x, g, train_idx.to(dev), train_type.to(dev))
@@ -110,11 +116,19 @@ def train_encoder(args, model, data_loader):
             torch.cuda.empty_cache()
 
             # optimization
-            optim.zero_grad()
-            loss.backward()
-            optim.step()
+            optimizer.zero_grad()
+            with amp.scale_loss(loss, optimizer) as scaled_loss:
+                scaled_loss.backward()
+            optimizer.step()
 
-            loss_epoch += loss.item() / no_batch
+            losses_epoch.append(loss.item())
+            t = time.time()
+            print('Batch time: %.2f' % (t - s))
+        loss_epoch = sum(losses_epoch) / len(losses_epoch)
+
+        t_e = time.time()
+        print('Epoch time: %.4f' % (t_e - s_e))
+
         scheduler.step()
         save_best(model, loss_epoch, epoch + 1, ENCODER_FILE, asc=False)
         torch.cuda.empty_cache()
@@ -194,7 +208,7 @@ def main():
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
-    parser.add_argument("--paths", type=bool, default=True, help="Use 2-hop paths for training.")
+    parser.add_argument("--paths", type=int, default=1, help="Use 2-hop paths for training.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")

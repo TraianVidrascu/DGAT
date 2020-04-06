@@ -57,7 +57,7 @@ class RelationalAttentionLayer(nn.Module):
         a = alpha * c_ijk
 
         # add self edges
-        a = torch.cat([a, self.self_edges], dim=0)
+        a = torch.cat([a, self.self_edges.type_as(a)], dim=0)
         end_nodes = torch.cat([end_nodes, self.self_edge_mask])
 
         h = scatter_add(a, end_nodes, dim=0)
@@ -81,7 +81,7 @@ class RelationalAttentionLayer(nn.Module):
 
         # add zero embeddings for paths of only one hop
         g_size = g.shape[1]
-        g_zeros = torch.zeros((1, g_size)).float().to(g.device)
+        g_zeros = torch.zeros((1, g_size)).type_as(g).to(g.device)
         g_aux = torch.cat([g, g_zeros], dim=0)
 
         k_1, k2 = edge_type
@@ -108,16 +108,17 @@ class RelationalAttentionLayer(nn.Module):
         # self edges
         n = h.shape[0]
         self._self_edges_mask(n)
-        end_nodes = edge_idx[1, :]
+        rows = edge_idx[0, :]
+        cols = edge_idx[1, :]
 
         # compute edge embeddings
         c_ijk = self._compute_edges(edge_idx, edge_type, h, g)
 
         # compute edge attention
-        alpha = self._attention(c_ijk, end_nodes)
+        alpha = self._attention(c_ijk, cols)
 
         # aggregate node representation
-        h = self._aggregate(end_nodes, alpha, c_ijk)
+        h = self._aggregate(cols, alpha, c_ijk)
         return h
 
 
@@ -184,7 +185,7 @@ class KB(nn.Module):
 
         if len(edge_type.shape) == 2:
             g_size = g.shape[1]
-            g_zeros = torch.zeros((1, g_size)).float().to(g.device)
+            g_zeros = torch.zeros((1, g_size)).type_as(g).to(g.device)
             g_aux = torch.cat([g, g_zeros], dim=0)
             k_1, k2 = edge_type
             d_norm = torch.norm(h[row] + g_aux[k_1] + g_aux[k2] - h[col], p=1, dim=1)

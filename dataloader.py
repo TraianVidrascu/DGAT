@@ -62,7 +62,7 @@ class DataLoader:
             path_idx = torch.cat([edge_idx, path_idx], dim=1)
             path_type = torch.cat([edge_type, path_type], dim=1)
             return edge_idx.to(dev), edge_type.to(dev), path_idx.to(dev), path_type.to(dev)
-        return edge_idx.to(dev), edge_type.to(dev)
+        return edge_idx.to(dev), edge_type.to(dev), edge_idx.to(dev), edge_type.to(dev)
 
     @staticmethod
     def corrupt_triplet(n, triplet, head=True):
