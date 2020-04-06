@@ -4,7 +4,6 @@ import time
 import torch
 import torch.optim as optim
 import wandb
-from apex import amp
 
 from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
@@ -67,7 +66,6 @@ def train_encoder(args, model, data_loader):
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=0.5, last_epoch=-1)
 
     # apex
-    model, optimizer = amp.initialize(model, optimizer, opt_level="O1",)
 
     train_idx, train_type, pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, path=use_paths, dev='cpu')
     n = x.shape[0]
@@ -117,8 +115,7 @@ def train_encoder(args, model, data_loader):
 
             # optimization
             optimizer.zero_grad()
-            with amp.scale_loss(loss, optimizer) as scaled_loss:
-                scaled_loss.backward()
+            loss.backward()
             optimizer.step()
 
             losses_epoch.append(loss.item())
