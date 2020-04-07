@@ -61,7 +61,7 @@ class DataLoader:
         return edge_idx.to(dev), edge_type.to(dev)
 
     def graph2paths(self, graph, dev='cpu'):
-        edge_idx, edge_type = DataLoader.graph2idx(graph, dev)
+        edge_idx, edge_type = DataLoader.graph2idx(graph, paths=True, dev=dev)
 
         path_idx, path_type = self.load_paths()
         path_idx = torch.cat([edge_idx, path_idx], dim=1)
