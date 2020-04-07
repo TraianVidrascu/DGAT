@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 import torch
-import concurrent.futures
+
+from dataloader import DataLoader
 
 
 def rank_triplet(scores, position):
@@ -91,3 +92,25 @@ def evaluate(model, h, g, dataloader, fold, dev='cpu'):
         ranks = np.array(ranks)
 
         return ranks_head, ranks_tail, ranks
+
+
+def evaluate_filtered(model, h, g, data_loader, fold, head, dev='cpu'):
+    with torch.no_grad():
+        # load corrupted head triplets
+
+        triplets_file = data_loader.get_filtered_eval_file(fold, head)
+        ranks = []
+        while True:
+            edge_idx, edge_type, position = DataLoader.load_list(triplets_file, head, dev)
+
+            # if no more lists break
+            if edge_idx is None:
+                break
+            scores = model.evaluate(h.to(dev), g.to(dev), edge_idx, edge_type)
+            rank = rank_triplet(scores, position)
+            ranks.append(rank)
+
+        triplets_file.close()
+        torch.cuda.empty_cache()
+        ranks = np.array(ranks)
+        return ranks

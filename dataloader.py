@@ -1,8 +1,8 @@
-# from stellargraph.data import EdgeSplitter
 import torch
+import ast
 
-PROBS = [0.0, 0.25, 0.50, 0.25]
-GLOBAL = 'global'
+BEGINLIST = 'BEGIN'
+ENDLIST = 'END'
 
 
 class DataLoader:
@@ -105,7 +105,44 @@ class DataLoader:
         file = self.dataset.get_filtered_eval_file(fold, head)
         return file
 
-    def negative_samples(self, n, edge_idx, edge_type, negative_ratio, dev='cpu'):
+    @staticmethod
+    def load_list(file, head, dev='cpu'):
+        position = -1
+        line = file.readline()
+        if line == '':
+            return None, None, position
+        elif BEGINLIST in line:
+            # read correct triplet
+            line = file.readline()
+            correct_triplet = torch.tensor(ast.literal_eval(line)).to(dev)
+
+            # read corrupted triplets
+            line = file.readline()
+            array = ast.literal_eval(line)
+            corrupted_triplets = torch.tensor(array).to(dev)
+
+            correct_part = correct_triplet[0]
+            correct_type = correct_triplet[1]
+            other_part = correct_triplet[2]
+
+            if head:
+                edge_idx = torch.stack([corrupted_triplets, correct_part.expand(corrupted_triplets.shape[0])])
+                correct_triplet = torch.tensor([other_part, correct_part])
+            else:
+                edge_idx = torch.stack([correct_part.expand(corrupted_triplets.shape[0]), corrupted_triplets])
+                correct_triplet = torch.tensor([correct_part, other_part])
+            # append correct triplet to first position
+            correct_triplet = correct_triplet[:, None]
+            edge_idx = torch.cat([correct_triplet, edge_idx], dim=1)
+            edge_type = correct_type.expand(corrupted_triplets.shape[0] + 1)
+            position = 0
+
+            file.readline()
+            return edge_idx, edge_type, position
+        return None, None, position
+
+    @staticmethod
+    def negative_samples(n, edge_idx, edge_type, negative_ratio, dev='cpu'):
 
         edge_idx_aux = edge_idx.repeat((1, negative_ratio))
         row, col = edge_idx_aux

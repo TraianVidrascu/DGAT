@@ -3,11 +3,12 @@ import time
 
 import torch
 import torch.optim as optim
+import numpy as np
 import wandb
 
 from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
-from metrics import get_metrics, evaluate
+from metrics import get_metrics, evaluate_filtered
 from model import KBNet, DKBATNet
 from utilis import save_best, load_model, set_random_seed
 
@@ -27,14 +28,16 @@ def get_encoder(args, x_size, g_size):
     heads = args.heads
     margin = args.margin
     alpha = args.alpha
+    negative_slope = args.negative_slope
 
     dev = args.device
 
     model = None
     if model_name == KBAT:
-        model = KBNet(x_size, g_size, h_size, o_size, heads, margin, device=dev)
+        model = KBNet(x_size, g_size, h_size, o_size, heads, margin, negative_slope=negative_slope, device=dev)
     elif model_name == DKBAT:
-        model = DKBATNet(x_size, g_size, h_size, o_size, heads, alpha, margin, device=dev)
+        model = DKBATNet(x_size, g_size, h_size, o_size, heads, alpha, margin, negative_slope=negative_slope,
+                         device=dev)
 
     return model
 
@@ -59,37 +62,30 @@ def train_encoder(args, model, data_loader):
     wandb.watch(model, log="all")
 
     first = 0
-    # if args.checkpoint:
-    #     model, first = load_model(model, ENCODER_CHECKPOINT)
 
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=0.5, last_epoch=-1)
 
-    # apex
-
-    train_idx, train_type, pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, path=use_paths, dev='cpu')
+    train_idx, train_type, pos_edge_idx, pos_edge_type = data_loader.graph2paths(graph, dev='cpu')
     n = x.shape[0]
 
     pos_edge_idx_aux = pos_edge_idx.repeat((1, negative_ratio))
     pos_edge_type_aux = pos_edge_type.repeat((1, negative_ratio))
 
-    batch_size = train_idx.shape[1] * 5  # for cluster * 5
-
+    batch_size = train_idx.shape[1]  # for cluster * 5
     for epoch in range(first, epochs):
         model.train()
 
+        # negative sampling
         neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio,
                                                                    'cpu')
-
         # shuffling
         perm = torch.randperm(pos_edge_type_aux.shape[1])
         pos_edge_idx_aux = pos_edge_idx_aux[:, perm]
         pos_edge_type_aux = pos_edge_type_aux[:, perm]
-        neg_edge_idx = neg_edge_idx[:, perm]
-        neg_edge_type = neg_edge_type[:, perm]
 
         m = pos_edge_idx_aux.shape[1]
-        iterations = torch.randperm(m)
+        iterations = torch.tensor([i for i in range(m)]).long()
 
         losses_epoch = []
 
@@ -138,7 +134,7 @@ def train_encoder(args, model, data_loader):
         else:
             wandb.log({'train_' + dataset_name + '_Loss_encoder': loss_epoch})
 
-        del neg_edge_idx, h_prime, g_prime, loss
+        del h_prime, g_prime, loss
         torch.cuda.empty_cache()
 
     del pos_edge_idx, pos_edge_type, x, g, graph, model
@@ -157,7 +153,9 @@ def get_ranking_metric(ranking_name, ranking, dataset_name, fold):
 
 
 def get_encoder_metrics(data_loader, h, g, fold, encoder, dev='cpu'):
-    ranks_head, ranks_tail, ranks = evaluate(encoder, h, g, data_loader, fold, dev)
+    ranks_head = evaluate_filtered(encoder, h, g, data_loader, fold, True, dev)
+    ranks_tail = evaluate_filtered(encoder, h, g, data_loader, fold, False, dev)
+    ranks = np.concatenate((ranks_head, ranks_tail))
 
     dataset_name = data_loader.get_name()
 
@@ -174,7 +172,7 @@ def embed_nodes(args, encoder, data):
 
     data_loader = DataLoader(data)
     x, g, graph = data_loader.load_train(dev)
-    edge_idx, edge_type = data_loader.graph2idx(graph, path=False, dev=dev)
+    edge_idx, edge_type = data_loader.graph2idx(graph, paths=False, dev=dev)
 
     encoder.eval()
     with torch.no_grad():
@@ -196,16 +194,16 @@ def main():
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval", type=int, default=500, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=bool, default=True, help="Debugging mod.")
+    parser.add_argument("--debug", type=bool, default=1, help="Debugging mod.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=2000, help="Number of training epochs for encoder.")
-    parser.add_argument("--step_size", type=int, default=250, help="Step size of scheduler.")
+    parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
+    parser.add_argument("--step_size", type=int, default=500, help="Step size of scheduler.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
-    parser.add_argument("--paths", type=int, default=1, help="Use 2-hop paths for training.")
+    parser.add_argument("--paths", type=int, default=0, help="Use 2-hop paths for training.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
