@@ -71,6 +71,16 @@ def get_model_metrics(data_loader, h, g, fold, model, model_name, dev='cpu'):
     return metrics
 
 
+def get_model_metrics_head_or_tail(data_loader, h, g, fold, model, model_name, head, dev='cpu'):
+    ranks = evaluate_filtered(model, h, g, data_loader, fold, head, dev)
+
+    dataset_name = data_loader.get_name()
+    part = 'head' if head else 'tail'
+    metrics = get_ranking_metric(part, ranks, dataset_name, model_name, fold)
+
+    return metrics
+
+
 def evaluate_list(model, h, g, corrupted, list_info, head):
     # evaluate for corrupted list
     n = corrupted.shape[0]
