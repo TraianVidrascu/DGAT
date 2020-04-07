@@ -322,7 +322,7 @@ class KBNet(KB):
 
 
 class ConvKB(nn.Module):
-    def __init__(self, input_dim, input_seq_len, in_channels, out_channels, drop_prob, dev='cpu'):
+    def __init__(self, input_dim, input_seq_len, in_channels, out_channels, drop_prob=0.0, dev='cpu'):
         super().__init__()
 
         self.conv_layer = nn.Conv2d(

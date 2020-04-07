@@ -32,8 +32,16 @@ def load_model(model, file):
         epoch = model_dict['epoch']
     return model, epoch
 
+
+def load_decoder_eval(model, rundir):
+    path = osp.join(rundir, 'encoder.pt')
+    if osp.exists(path):
+        model_dict = torch.load(path)
+        model.load_state_dict(model_dict['model_state_dict'])
+    return model
+
+
 def set_random_seed():
     if torch.cuda.is_available():
         torch.cuda.manual_seed(42)
     torch.manual_seed(42)
-

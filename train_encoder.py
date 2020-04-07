@@ -236,11 +236,12 @@ def main():
     model = get_encoder(args, x_size, g_size)
 
     # train model and save embeddings
-    #train_encoder(args, model, data_loader)
+    train_encoder(args, model, data_loader)
     h, g = embed_nodes(args, model, dataset)
     dataset.save_embedding(h, g)
 
     # evaluate test and valid fold after training
+    h, g = data_loader.load_embedding(args.model)
     metrics = get_encoder_metrics(data_loader, h, g, 'test', model, dev=args.device)
     wandb.log(metrics)
 
