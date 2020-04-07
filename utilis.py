@@ -33,8 +33,8 @@ def load_model(model, file):
     return model, epoch
 
 
-def load_decoder_eval(model, rundir):
-    path = osp.join(rundir, 'encoder.pt')
+def load_decoder_eval(model, rundir, model_name, dataset_name):
+    path = osp.join(rundir, 'decoder_' + model_name.lower() + '_' + dataset_name.lower() + '.pt')
     if osp.exists(path):
         model_dict = torch.load(path)
         model.load_state_dict(model_dict['model_state_dict'])

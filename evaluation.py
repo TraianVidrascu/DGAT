@@ -3,22 +3,24 @@ import argparse
 from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
 from train_decoder import get_decoder, get_decoder_metrics
-from train_encoder import get_encoder_metrics, KBAT
+from train_encoder import get_encoder_metrics, KBAT, DKBAT
 from utilis import load_decoder_eval
 
 
 def evaluate_encoder(data_loader, fold, encoder, model_name, dev='cpu'):
     h, g = data_loader.load_embedding(model_name)
     metrics = get_encoder_metrics(data_loader, h, g, fold, encoder, dev=dev)
+    print(model_name + '_ConvKB ' + data_loader.get_name() + ' ' + fold + ' metrics:')
     print(metrics)
 
 
 def evaluate_decoder(data_loader, fold, decoder, run_dir, model_name, dev='cpu'):
     h, g = data_loader.load_embedding(model_name)
-    load_decoder_eval(decoder, run_dir)
+    dataset_name = data_loader.get_name()
+    load_decoder_eval(decoder, run_dir, model_name, dataset_name)
 
-    metrics = get_decoder_metrics(data_loader, h, g, fold, decoder, dev=dev)
-    print(model_name + '_ConvKB' + fold + ' metrics:')
+    metrics = get_decoder_metrics(decoder, h, g, data_loader, fold, dev=dev)
+    print(model_name + '_ConvKB ' + data_loader.get_name() + ' ' + fold + ' metrics:')
     print(metrics)
 
 
@@ -29,7 +31,7 @@ def main_decoder():
     parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--model", type=str, default=KBAT, help='Model name')
+    parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
 
     # evaluation parameters
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for evaluation.")
@@ -47,6 +49,10 @@ def main_decoder():
 
     fold = args.fold
     model_name = args.model
-    run_dir = './run_dir'
+    run_dir = './eval_dir'
 
     evaluate_decoder(data_loader, fold, decoder, run_dir, model_name, dev='cpu')
+
+
+if __name__ == '__main__':
+    main_decoder()

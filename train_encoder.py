@@ -56,6 +56,7 @@ def train_encoder(args, model, data_loader):
     use_paths = True if args.paths == 1 else False
 
     dataset_name = data_loader.get_name()
+    encoder_file = ENCODER_FILE + '_' + args.model.lower() + '_' + dataset_name.lower() + '.pt'
 
     # load data
     x, g, graph = data_loader.load_train(dev)
@@ -123,7 +124,7 @@ def train_encoder(args, model, data_loader):
         print('Epoch time: %.4f' % (t_e - s_e))
 
         scheduler.step()
-        save_best(model, loss_epoch, epoch + 1, ENCODER_FILE, asc=False)
+        save_best(model, loss_epoch, epoch + 1, encoder_file, asc=False)
         torch.cuda.empty_cache()
         if (epoch + 1) % eval == 0:
             model.eval()
@@ -182,7 +183,8 @@ def embed_nodes(args, encoder, data):
 
 def load_encoder(args, g_size, x_size):
     encoder = get_encoder(args, x_size, g_size)
-    encoder, _ = load_model(encoder, ENCODER_FILE)
+    encoder_file = ENCODER_FILE + '_' + args.model.lower() + '_' + args.dataset.lower() + '.pt'
+    encoder, _ = load_model(encoder, encoder_file)
     return encoder
 
 

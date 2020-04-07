@@ -43,9 +43,9 @@ def train_decoder(args, decoder, data_loader):
     _, _, graph = data_loader.load_train('cpu')
     h, g = data_loader.load_embedding(model, 'cpu')
 
+    decoder_file = DECODER_FILE + '_' + model.lower() + '_' + dataset_name.lower() + '.pt'
+
     first = 0
-    # if args.checkpoint:
-    #     decoder, first = load_model(decoder, DECODER_CHECKPOINT)
 
     optim = torch.optim.Adam(decoder.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=25, gamma=0.5, last_epoch=-1)
@@ -106,7 +106,7 @@ def train_decoder(args, decoder, data_loader):
         scheduler.step()
 
         # save_model(decoder, loss_epoch, epoch + 1, DECODER_CHECKPOINT)
-        save_best(decoder, loss_epoch, epoch + 1, DECODER_FILE, asc=False)
+        save_best(decoder, loss_epoch, epoch + 1, decoder_file, asc=False)
 
         if (epoch + 1) % eval == 0:
             metrics = get_decoder_metrics(decoder, h, g, data_loader, 'valid', dev)
@@ -119,7 +119,8 @@ def train_decoder(args, decoder, data_loader):
 
 def load_decoder(args):
     decoder = get_decoder(args)
-    model, _ = load_model(decoder, DECODER_FILE)
+    decoder_file = DECODER_FILE + '_' + args.model.lower() + '_' + args.dataset.lower() + '.pt'
+    model, _ = load_model(decoder, decoder_file)
     return model
 
 
