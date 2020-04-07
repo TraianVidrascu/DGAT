@@ -7,9 +7,13 @@ import wandb
 
 from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
-from metrics import rank_triplet, get_metrics, evaluate, evaluate_filtered
+from metrics import get_model_metrics
 from model import ConvKB
 from utilis import load_model, save_model, save_best, set_random_seed
+
+DECODER = 'decoder'
+
+DECODER = 'decoder'
 
 DECODER_FILE = 'decoder.pt'
 DECODER_CHECKPOINT = 'decoder_checkpoint.pt'
@@ -109,7 +113,7 @@ def train_decoder(args, decoder, data_loader):
         save_best(decoder, loss_epoch, epoch + 1, decoder_file, asc=False)
 
         if (epoch + 1) % eval == 0:
-            metrics = get_decoder_metrics(decoder, h, g, data_loader, 'valid', dev)
+            metrics = get_model_metrics(decoder, h, g, data_loader, 'valid', DECODER, dev)
 
             metrics['train_' + dataset_name + '_Loss_decoder'] = loss_epoch
             wandb.log(metrics)
@@ -122,32 +126,6 @@ def load_decoder(args):
     decoder_file = DECODER_FILE + '_' + args.model.lower() + '_' + args.dataset.lower() + '.pt'
     model, _ = load_model(decoder, decoder_file)
     return model
-
-
-def get_ranking_metric(ranking_name, ranking, dataset_name, fold):
-    mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranking)
-
-    metrics = {fold + '_' + dataset_name + '_' + ranking_name + '_MR_decoder': mr,
-               fold + '_' + dataset_name + '_' + ranking_name + '_MRR_decoder': mrr,
-               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@1_decoder': hits_1,
-               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@3_decoder': hits_3,
-               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@10_decoder': hits_10}
-    return metrics
-
-
-def get_decoder_metrics(model, h, g, data_loader, fold, dev='cpu'):
-    ranks_tail = evaluate_filtered(model, h, g, data_loader, fold, False, dev)
-    ranks_head = evaluate_filtered(model, h, g, data_loader, fold, True, dev)
-    ranks = np.concatenate((ranks_head, ranks_tail))
-
-    dataset_name = data_loader.get_name()
-
-    metrics_head = get_ranking_metric('head', ranks_head, dataset_name, fold)
-    metrics_tail = get_ranking_metric('tail', ranks_tail, dataset_name, fold)
-    metrics_all = get_ranking_metric('both', ranks, dataset_name, fold)
-
-    metrics = {**metrics_head, **metrics_tail, **metrics_all}
-    return metrics
 
 
 def main():
@@ -200,7 +178,7 @@ def main():
 
     h, g = data_loader.load_embedding(args.model)
     # Evaluate test and valid fold after training is done
-    metrics = get_decoder_metrics(decoder, h, g, data_loader, 'test', args.device)
+    metrics = get_model_metrics(decoder, h, g, data_loader, 'test', DECODER, args.device)
     print('done eval test!')
     wandb.log(metrics)
 

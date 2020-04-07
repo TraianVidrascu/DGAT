@@ -3,19 +3,17 @@ import time
 
 import torch
 import torch.optim as optim
-import numpy as np
 import wandb
 
 from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
-from metrics import get_metrics, evaluate_filtered
+from metrics import get_model_metrics
 from model import KBNet, DKBATNet
 from utilis import save_best, load_model, set_random_seed
 
+ENCODER = 'encoder'
 DKBAT = 'DKBAT'
-
 KBAT = 'KBAT'
-
 ENCODER_FILE = 'encoder.pt'
 ENCODER_CHECKPOINT = 'encoder_check.pt'
 
@@ -129,7 +127,7 @@ def train_encoder(args, model, data_loader):
         if (epoch + 1) % eval == 0:
             model.eval()
             h_prime, g_prime = model(x, g, train_idx.to(dev), train_type.to(dev))
-            metrics = get_encoder_metrics(data_loader, h_prime, g_prime, 'valid', model, dev=args.device)
+            metrics = get_model_metrics(data_loader, h_prime, g_prime, 'valid', model, dev=args.device)
             metrics['train_' + dataset_name + '_Loss_encoder'] = loss_epoch
             wandb.log(metrics)
         else:
@@ -140,32 +138,6 @@ def train_encoder(args, model, data_loader):
 
     del pos_edge_idx, pos_edge_type, x, g, graph, model
     torch.cuda.empty_cache()
-
-
-def get_ranking_metric(ranking_name, ranking, dataset_name, fold):
-    mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranking)
-
-    metrics = {fold + '_' + dataset_name + '_' + ranking_name + '_MR_encoder': mr,
-               fold + '_' + dataset_name + '_' + ranking_name + '_MRR_encoder': mrr,
-               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@1_encoder': hits_1,
-               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@3_encoder': hits_3,
-               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@10_encoder': hits_10}
-    return metrics
-
-
-def get_encoder_metrics(data_loader, h, g, fold, encoder, dev='cpu'):
-    ranks_head = evaluate_filtered(encoder, h, g, data_loader, fold, True, dev)
-    ranks_tail = evaluate_filtered(encoder, h, g, data_loader, fold, False, dev)
-    ranks = np.concatenate((ranks_head, ranks_tail))
-
-    dataset_name = data_loader.get_name()
-
-    metrics_head = get_ranking_metric('head', ranks_head, dataset_name, fold)
-    metrics_tail = get_ranking_metric('tail', ranks_tail, dataset_name, fold)
-    metrics_all = get_ranking_metric('both', ranks, dataset_name, fold)
-
-    metrics = {**metrics_head, **metrics_tail, **metrics_all}
-    return metrics
 
 
 def embed_nodes(args, encoder, data):
@@ -244,7 +216,7 @@ def main():
 
     # evaluate test and valid fold after training
     h, g = data_loader.load_embedding(args.model)
-    metrics = get_encoder_metrics(data_loader, h, g, 'test', model, dev=args.device)
+    metrics = get_model_metrics(data_loader, h, g, 'test', model, ENCODER, dev=args.device)
     wandb.log(metrics)
 
 

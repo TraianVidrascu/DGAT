@@ -45,6 +45,32 @@ def get_metrics(ranks):
     return mr, mrr, hits_1, hits_3, hits_10
 
 
+def get_ranking_metric(ranking_name, ranking, model_name, dataset_name, fold):
+    mr, mrr, hits_1, hits_3, hits_10 = get_metrics(ranking)
+
+    metrics = {fold + '_' + dataset_name + '_' + ranking_name + '_MR_' + model_name: mr,
+               fold + '_' + dataset_name + '_' + ranking_name + '_MRR_' + model_name: mrr,
+               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@1_' + model_name: hits_1,
+               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@3_' + model_name: hits_3,
+               fold + '_' + dataset_name + '_' + ranking_name + '_Hits@10_' + model_name: hits_10}
+    return metrics
+
+
+def get_model_metrics(data_loader, h, g, fold, model, model_name, dev='cpu'):
+    ranks_head = evaluate_filtered(model, h, g, data_loader, fold, True, dev)
+    ranks_tail = evaluate_filtered(model, h, g, data_loader, fold, False, dev)
+    ranks = np.concatenate((ranks_head, ranks_tail))
+
+    dataset_name = data_loader.get_name()
+
+    metrics_head = get_ranking_metric('head', ranks_head, dataset_name, model_name, fold)
+    metrics_tail = get_ranking_metric('tail', ranks_tail, dataset_name, model_name, fold)
+    metrics_all = get_ranking_metric('both', ranks, dataset_name, model_name, fold)
+
+    metrics = {**metrics_head, **metrics_tail, **metrics_all}
+    return metrics
+
+
 def evaluate_list(model, h, g, corrupted, list_info, head):
     # evaluate for corrupted list
     n = corrupted.shape[0]
@@ -100,6 +126,7 @@ def evaluate_filtered(model, h, g, data_loader, fold, head, dev='cpu'):
 
         triplets_file = data_loader.get_filtered_eval_file(fold, head)
         ranks = []
+        counter = 0
         while True:
             edge_idx, edge_type, position = DataLoader.load_list(triplets_file, head, dev)
 
@@ -110,6 +137,9 @@ def evaluate_filtered(model, h, g, data_loader, fold, head, dev='cpu'):
             rank = rank_triplet(scores, position)
             ranks.append(rank)
 
+            # remove it when runnig experiments, only for debug
+            counter += 1
+            print("List %.d" % counter)
         triplets_file.close()
         torch.cuda.empty_cache()
         ranks = np.array(ranks)
