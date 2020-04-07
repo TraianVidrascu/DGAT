@@ -127,10 +127,10 @@ class DataLoader:
 
             if head:
                 edge_idx = torch.stack([corrupted_triplets, correct_part.expand(corrupted_triplets.shape[0])])
-                correct_triplet = torch.tensor([other_part, correct_part])
+                correct_triplet = torch.tensor([other_part, correct_part]).to(dev)
             else:
                 edge_idx = torch.stack([correct_part.expand(corrupted_triplets.shape[0]), corrupted_triplets])
-                correct_triplet = torch.tensor([correct_part, other_part])
+                correct_triplet = torch.tensor([correct_part, other_part]).to(dev)
             # append correct triplet to first position
             correct_triplet = correct_triplet[:, None]
             edge_idx = torch.cat([correct_triplet, edge_idx], dim=1)

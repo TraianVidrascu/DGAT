@@ -172,7 +172,7 @@ def embed_nodes(args, encoder, data):
 
     data_loader = DataLoader(data)
     x, g, graph = data_loader.load_train(dev)
-    edge_idx, edge_type = data_loader.graph2idx(graph, paths=False, dev=dev)
+    edge_idx, edge_type = data_loader.graph2idx(graph, paths=True, dev=dev)
 
     encoder.eval()
     with torch.no_grad():
@@ -236,7 +236,7 @@ def main():
     model = get_encoder(args, x_size, g_size)
 
     # train model and save embeddings
-    train_encoder(args, model, data_loader)
+    #train_encoder(args, model, data_loader)
     h, g = embed_nodes(args, model, dataset)
     dataset.save_embedding(h, g)
 

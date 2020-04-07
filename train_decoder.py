@@ -7,7 +7,7 @@ import wandb
 
 from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
-from metrics import rank_triplet, get_metrics, evaluate
+from metrics import rank_triplet, get_metrics, evaluate, evaluate_filtered
 from model import ConvKB
 from utilis import load_model, save_model, save_best, set_random_seed
 
@@ -135,7 +135,9 @@ def get_ranking_metric(ranking_name, ranking, dataset_name, fold):
 
 
 def get_decoder_metrics(model, h, g, data_loader, fold, dev='cpu'):
-    ranks_head, ranks_tail, ranks = evaluate(model, h, g, data_loader, fold, dev=dev)
+    ranks_tail = evaluate_filtered(model, h, g, data_loader, fold, False, dev)
+    ranks_head = evaluate_filtered(model, h, g, data_loader, fold, True, dev)
+    ranks = np.concatenate((ranks_head, ranks_tail))
 
     dataset_name = data_loader.get_name()
 
