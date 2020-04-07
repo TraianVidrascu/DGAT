@@ -96,6 +96,8 @@ class Dataset:
         path_g = osp.join(self.run_dir, 'g_' + model_name + '.pt')
         h = torch.load(path_h).to(dev)
         g = torch.load(path_g).to(dev)
+        wandb.save(path_h)
+        wandb.save(path_g)
         return h, g
 
     def save_embedding(self, h, g):

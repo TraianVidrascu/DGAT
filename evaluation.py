@@ -38,7 +38,7 @@ def main_decoder():
 
     # evaluation parameters
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for evaluation.")
-    parser.add_argument("--fold", type=str, default='valid', help="Fold used for evaluation.")
+    parser.add_argument("--fold", type=str, default='test', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
     args, cmdline_args = parser.parse_known_args()
@@ -53,11 +53,12 @@ def main_decoder():
 
     head = True if args.head == 1 else 0
     prefix = 'head' if head else 'tail'
-    wandb.init(project=args.model + '_' + dataset.name + '_' + prefix + '_eval', config=args)
 
     fold = args.fold
     model_name = args.model
     run_dir = './eval_dir'
+
+    wandb.init(project=args.model + '_' + dataset.name + '_' + fold + '_' + prefix + '_eval', config=args)
 
     evaluate_decoder(data_loader, fold, decoder, run_dir, model_name, head, dev=args.device)
 

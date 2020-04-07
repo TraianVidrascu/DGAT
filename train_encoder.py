@@ -214,8 +214,7 @@ def main():
     h, g = embed_nodes(args, model, dataset)
     dataset.save_embedding(h, g)
 
-    # evaluate test and valid fold after training
-    h, g = data_loader.load_embedding(args.model)
+    # evaluate test fold after training
     metrics = get_model_metrics(data_loader, h, g, 'test', model, ENCODER, dev=args.device)
     wandb.log(metrics)
 
