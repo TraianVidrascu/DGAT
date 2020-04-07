@@ -8,6 +8,10 @@ import numpy as np
 import concurrent.futures
 from dataloader import DataLoader
 
+BEGINLIST = 'BEGIN'
+
+ENDLIST = 'END'
+
 
 class Dataset:
     def __init__(self, raw_dir, processed_dir, eval_dir, run_dir):
@@ -141,6 +145,76 @@ class Dataset:
         self.read_edges(node_mapper, rel_mapper)
         self.save_paths(2)
         self.save_triplets_raw()
+        self.filter_evaluation_folds()
+
+    @staticmethod
+    def find(tensor, values):
+        return torch.nonzero(tensor[..., None] == values)
+
+    def filter_evaluation_triplets(self, fold, head=True):
+        triplets_raw, lists_raw = self.load_evaluation_triplets_raw(fold, head)
+        if fold == 'valid':
+            other_fold = 'test'
+        else:
+            other_fold = 'valid'
+
+        _, _, graph_other = self.load_fold(other_fold, 'cpu')
+        other_idx, other_type = DataLoader.graph2idx(graph_other)
+
+        _, _, graph_train = self.load_fold('train', 'cpu')
+        train_idx, train_type = DataLoader.graph2idx(graph_train)
+
+        prefix = 'head_' if head else 'tail_'
+        triplets_file_path = self.eval_dir + prefix + fold + '_triplets_filtered.txt'
+        file = open(triplets_file_path, 'w')
+
+        no_lists = triplets_raw.shape[0]
+        m = triplets_raw.shape[1]
+        correct_axis = int(head)
+        corrupt_axis = 1 - correct_axis
+
+        for list_idx in range(no_lists):
+            # get triplet uncorrupted information
+            correct_part = lists_raw[0, list_idx]
+            position = lists_raw[1, list_idx]
+            triplet_type = lists_raw[2, list_idx]
+
+            # same train set
+            same_part_train = train_idx[correct_axis, :] == correct_part  # same correct part
+            same_type_train = train_type[:] == triplet_type  # same type
+            same_correct_train = same_part_train & same_type_train
+
+            # same other fold
+            same_part_other = other_idx[correct_axis, :] == correct_part  # same correct part
+            same_type_other = other_type[:] == triplet_type  # same type
+            same_correct_other = same_part_other & same_type_other
+
+            corrupted = triplets_raw[list_idx, :]
+            correct_triplet = torch.tensor([correct_part, triplet_type, corrupted[position]])
+
+            same_train = Dataset.find(corrupted, train_idx[corrupt_axis, same_correct_train])[:, 0]
+            corrupted = torch.LongTensor(np.delete(corrupted.data.numpy(), same_train))
+
+            same_other = Dataset.find(corrupted, other_idx[corrupt_axis, same_correct_other])[:, 0]
+            corrupted = torch.LongTensor(np.delete(corrupted.data.numpy(), same_other))
+
+            string_list = BEGINLIST + '\n' + str(correct_triplet.tolist()) + '\n' + str(corrupted.tolist()) + '\n'
+            file.write(string_list)
+            print(prefix + fold + ' Finished list: %.d' % list_idx)
+            file.write(ENDLIST + '\n')
+        file.close()
+
+    def filter_evaluation_folds(self):
+        self.filter_evaluation_triplets('valid', True)
+        self.filter_evaluation_triplets('valid', False)
+        self.filter_evaluation_triplets('test', True)
+        self.filter_evaluation_triplets('test', False)
+
+    def get_filtered_eval_file(self, fold, head):
+        prefix = 'head_' if head else 'tail_'
+        triplets_file_path = self.eval_dir + prefix + fold + '_triplets_filtered.txt'
+        file = open(triplets_file_path, 'r')
+        return file
 
     def save_evaluation_triplets_raw(self, fold, head=True, dev='cpu'):
         x, g, graph = self.load_fold(fold, dev)

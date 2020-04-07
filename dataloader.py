@@ -48,21 +48,25 @@ class DataLoader:
         edge_type = torch.stack([k_1, k_2])
         return edge_idx, edge_type
 
-    def graph2idx(self, graph, path=True, dev='cpu'):
+    @staticmethod
+    def graph2idx(graph, paths=False, dev='cpu'):
         edges = list(map(lambda x: [x[0], x[1], x[2]['label']], graph.edges(data=True)))
 
         edges = torch.tensor(edges).long()
         edge_idx = edges[:, 0:2].t()
         edge_type = edges[:, 2]
-        edge_type = torch.stack([edge_type, -torch.ones(edge_type.shape[0]).long()])
+        if paths:
+            edge_type = torch.stack([edge_type, -torch.ones(edge_type.shape[0]).long()])
 
-        if path:
-            path_idx, path_type = self.load_paths()
+        return edge_idx.to(dev), edge_type.to(dev)
 
-            path_idx = torch.cat([edge_idx, path_idx], dim=1)
-            path_type = torch.cat([edge_type, path_type], dim=1)
-            return edge_idx.to(dev), edge_type.to(dev), path_idx.to(dev), path_type.to(dev)
-        return edge_idx.to(dev), edge_type.to(dev), edge_idx.to(dev), edge_type.to(dev)
+    def graph2paths(self, graph, dev='cpu'):
+        edge_idx, edge_type = DataLoader.graph2idx(graph, dev)
+
+        path_idx, path_type = self.load_paths()
+        path_idx = torch.cat([edge_idx, path_idx], dim=1)
+        path_type = torch.cat([edge_type, path_type], dim=1)
+        return edge_idx.to(dev), edge_type.to(dev), path_idx.to(dev), path_type.to(dev)
 
     @staticmethod
     def corrupt_triplet(n, triplet, head=True):
@@ -96,6 +100,10 @@ class DataLoader:
     def load_evaluation_triplets_raw(self, fold, head=True, dev='cpu'):
         triplets, lists = self.dataset.load_evaluation_triplets_raw(fold, head, dev)
         return triplets, lists
+
+    def get_filtered_eval_file(self, fold, head):
+        file = self.dataset.get_filtered_eval_file(fold, head)
+        return file
 
     def negative_samples(self, n, edge_idx, edge_type, negative_ratio, dev='cpu'):
 
