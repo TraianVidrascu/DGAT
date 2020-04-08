@@ -37,7 +37,7 @@ def main_decoder():
     parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
 
     # evaluation parameters
-    parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for evaluation.")
+    parser.add_argument("--dataset", type=str, default='WN18RR', help="Dataset used for evaluation.")
     parser.add_argument("--fold", type=str, default='test', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 

@@ -51,10 +51,9 @@ def train_encoder(args, model, data_loader):
     decay = args.decay
     epochs = args.epochs
     step_size = args.step_size
-    use_paths = True if args.paths == 1 else False
 
     dataset_name = data_loader.get_name()
-    encoder_file = ENCODER_FILE + '_' + args.model.lower() + '_' + dataset_name.lower() + '.pt'
+    encoder_file = ENCODER + '_' + args.model.lower() + '_' + dataset_name.lower() + '.pt'
 
     # load data
     x, g, graph = data_loader.load_train(dev)
@@ -71,7 +70,7 @@ def train_encoder(args, model, data_loader):
     pos_edge_idx_aux = pos_edge_idx.repeat((1, negative_ratio))
     pos_edge_type_aux = pos_edge_type.repeat((1, negative_ratio))
 
-    batch_size = train_idx.shape[1]  # for cluster * 5
+    batch_size = train_idx.shape[1] * 2  # for cluster * 5
     for epoch in range(first, epochs):
         model.train()
 
@@ -127,7 +126,7 @@ def train_encoder(args, model, data_loader):
         if (epoch + 1) % eval == 0:
             model.eval()
             h_prime, g_prime = model(x, g, train_idx.to(dev), train_type.to(dev))
-            metrics = get_model_metrics(data_loader, h_prime, g_prime, 'valid', model, dev=args.device)
+            metrics = get_model_metrics(data_loader, h_prime, g_prime, 'valid', model, ENCODER, dev=args.device)
             metrics['train_' + dataset_name + '_Loss_encoder'] = loss_epoch
             wandb.log(metrics)
         else:
@@ -167,7 +166,7 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=500, help="After how many epochs to evaluate.")
+    parser.add_argument("--eval", type=int, default=3000, help="After how many epochs to evaluate.")
     parser.add_argument("--debug", type=bool, default=1, help="Debugging mod.")
 
     # training parameters
@@ -177,7 +176,6 @@ def main():
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
-    parser.add_argument("--paths", type=int, default=0, help="Use 2-hop paths for training.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
@@ -212,11 +210,7 @@ def main():
     # train model and save embeddings
     train_encoder(args, model, data_loader)
     h, g = embed_nodes(args, model, dataset)
-    dataset.save_embedding(h, g)
-
-    # evaluate test fold after training
-    metrics = get_model_metrics(data_loader, h, g, 'test', model, ENCODER, dev=args.device)
-    wandb.log(metrics)
+    dataset.save_embedding(h, g, args.model)
 
 
 if __name__ == "__main__":

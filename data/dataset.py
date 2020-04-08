@@ -100,9 +100,9 @@ class Dataset:
         wandb.save(path_g)
         return h, g
 
-    def save_embedding(self, h, g):
-        path_h = osp.join(self.processed_dir, 'h.pt')
-        path_g = osp.join(self.processed_dir, 'g.pt')
+    def save_embedding(self, h, g, model_name):
+        path_h = osp.join(self.processed_dir, 'h_' + model_name + '.pt')
+        path_g = osp.join(self.processed_dir, 'g_' + model_name + '.pt')
         torch.save(h, path_h)
         torch.save(g, path_g)
         wandb.save(path_h)
