@@ -229,20 +229,20 @@ class DKBATNet(KB):
         self.inbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, dropout=dropout,
                                                             device='cuda:1')
         self.outbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, dropout=dropout,
-                                                             device='cuda:1')
+                                                             device='cuda:2')
         self.alpha_input = AlphaLayer(hidden_size)
 
         self.inbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads,
                                                              dropout=dropout,
-                                                             device='cuda:2')
+                                                             device='cuda:1')
         self.outbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads,
                                                               dropout=dropout,
                                                               device='cuda:2')
 
         self.alpha_output = AlphaLayer(output_size, 'cuda:0')
 
-        self.entity_layer = EntityLayer(x_size, heads, output_size, device='cuda:3')
-        self.relation_layer = RelationLayer(g_size, output_size, device='cuda:3')
+        self.entity_layer = EntityLayer(x_size, heads, output_size, device='cuda:1')
+        self.relation_layer = RelationLayer(g_size, output_size, device='cuda:2')
 
         self.loss_fct = nn.MarginRankingLoss(margin=margin).to('cuda:0')
 
@@ -262,8 +262,8 @@ class DKBATNet(KB):
 
         h_inbound = self.inbound_input_layer(x.to('cuda:1'), g.to('cuda:1'), edge_idx.to('cuda:1'),
                                              edge_type.to('cuda:1'))
-        h_outbound = self.outbound_input_layer(x.to('cuda:1'), g.to('cuda:1'), outbound_edge_idx.to('cuda:1'),
-                                               edge_type.to('cuda:1'))
+        h_outbound = self.outbound_input_layer(x.to('cuda:2'), g.to('cuda:2'), outbound_edge_idx.to('cuda:2'),
+                                               edge_type.to('cuda:2'))
         h_inbound, h_outbound = h_inbound.to('cuda:0'), h_outbound.to('cuda:0')
 
         alpha = self.alpha_input(h_inbound, h_outbound)
@@ -274,8 +274,8 @@ class DKBATNet(KB):
 
         torch.cuda.empty_cache()
 
-        h_inbound = self.inbound_output_layer(h.to('cuda:2'), g.to('cuda:2'), edge_idx.to('cuda:2'),
-                                              edge_type.to('cuda:2'))
+        h_inbound = self.inbound_output_layer(h.to('cuda:1'), g.to('cuda:1'), edge_idx.to('cuda:1'),
+                                              edge_type.to('cuda:1'))
         h_outbound = self.outbound_output_layer(h.to('cuda:2'), g.to('cuda:2'), outbound_edge_idx.to('cuda:2'),
                                                 edge_type.to('cuda:2'))
         h_inbound, h_outbound = h_inbound.to('cuda:0'), h_outbound.to('cuda:0')
@@ -285,11 +285,11 @@ class DKBATNet(KB):
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
 
-        h_prime = self.entity_layer(x.to('cuda:3'), h.to('cuda:3'))
+        h_prime = self.entity_layer(x.to('cuda:1'), h.to('cuda:1'))
         h_prime = F.normalize(h_prime, p=2, dim=2)
 
         h_prime = self._merge_heads(h_prime)
-        g_prime = self.relation_layer(g.to('cuda:3'))
+        g_prime = self.relation_layer(g.to('cuda:2'))
 
         return h_prime.to('cuda:0'), g_prime.to('cuda:0')
 
