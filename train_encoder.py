@@ -26,15 +26,16 @@ def get_encoder(args, x_size, g_size):
     heads = args.heads
     margin = args.margin
     alpha = args.alpha
+    dropout = args.dropout
     negative_slope = args.negative_slope
 
     dev = args.device
 
     model = None
     if model_name == KBAT:
-        model = KBNet(x_size, g_size, h_size, o_size, heads, margin, negative_slope=negative_slope,device=dev)
+        model = KBNet(x_size, g_size, h_size, o_size, heads, margin,dropout, negative_slope=negative_slope,device=dev)
     elif model_name == DKBAT:
-        model = DKBATNet(x_size, g_size, h_size, o_size, heads, alpha, margin, negative_slope=negative_slope,device=dev)
+        model = DKBATNet(x_size, g_size, h_size, o_size, heads, alpha, margin,dropout, negative_slope=negative_slope,device=dev)
 
     return model
 

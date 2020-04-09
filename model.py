@@ -124,12 +124,12 @@ class RelationalAttentionLayer(nn.Module):
 
 
 class EntityLayer(nn.Module):
-    def __init__(self, initial_size, heads, layer_size, dev='cpu'):
+    def __init__(self, initial_size, heads, layer_size, device='cpu'):
         super(EntityLayer, self).__init__()
         # entity embedding
         self.weights_ent = nn.Linear(initial_size, layer_size)
         self.init_params()
-        self.to(dev)
+        self.to(device)
         self.heads = heads
 
     def init_params(self):
@@ -222,22 +222,29 @@ class KB(nn.Module):
 
 
 class DKBATNet(KB):
-    def __init__(self, x_size, g_size, hidden_size, output_size, heads, alpha=0.5, margin=1, negative_slope=0.2,
+    def __init__(self, x_size, g_size, hidden_size, output_size, heads, alpha=0.5, margin=1, dropout=0.3,
+                 negative_slope=0.2,
                  device='cpu'):
         super(DKBATNet, self).__init__()
-        self.inbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device)
-        self.outbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device)
+        self.inbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, dropout=dropout,
+                                                            device='cuda:1')
+        self.outbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, dropout=dropout,
+                                                             device='cuda:1')
         self.alpha_input = AlphaLayer(hidden_size)
 
-        self.inbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads, device)
-        self.outbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads, device)
+        self.inbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads,
+                                                             dropout=dropout,
+                                                             device='cuda:2')
+        self.outbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads,
+                                                              dropout=dropout,
+                                                              device='cuda:2')
 
-        self.alpha_output = AlphaLayer(output_size)
+        self.alpha_output = AlphaLayer(output_size, 'cuda:0')
 
-        self.entity_layer = EntityLayer(x_size, heads, output_size)
-        self.relation_layer = RelationLayer(g_size, output_size)
+        self.entity_layer = EntityLayer(x_size, heads, output_size, device='cuda:3')
+        self.relation_layer = RelationLayer(g_size, output_size, device='cuda:3')
 
-        self.loss_fct = nn.MarginRankingLoss(margin=margin)
+        self.loss_fct = nn.DataParallel(nn.MarginRankingLoss(margin=margin))
 
         self.heads = heads
         self.output_size = output_size
@@ -253,8 +260,10 @@ class DKBATNet(KB):
         row, col = edge_idx
         outbound_edge_idx = torch.stack([col, row])
 
-        h_inbound = self.inbound_input_layer(x, g, edge_idx, edge_type)
-        h_outbound = self.outbound_input_layer(x, g, outbound_edge_idx, edge_type)
+        h_inbound = self.inbound_input_layer(x.to('cuda:1'), g.to('cuda:1'), edge_idx, edge_type)
+        h_outbound = self.outbound_input_layer(x.to('cuda:1'), g.to('cuda:1'), outbound_edge_idx, edge_type)
+        h_inbound, h_outbound = h_inbound.to('cuda:0'), h_outbound.to('cuda:0')
+
         alpha = self.alpha_input(h_inbound, h_outbound)
         h = alpha * h_inbound + (1 - alpha) * h_outbound
         h = self.actv(h)
@@ -263,31 +272,35 @@ class DKBATNet(KB):
 
         torch.cuda.empty_cache()
 
-        h_inbound = self.inbound_output_layer(h, g, edge_idx, edge_type)
-        h_outbound = self.outbound_output_layer(h, g, outbound_edge_idx, edge_type)
+        h_inbound = self.inbound_output_layer(h.to('cuda:2'), g.to('cuda:2'), edge_idx, edge_type)
+        h_outbound = self.outbound_output_layer(h.to('cuda:2'), g.to('cuda:2'), outbound_edge_idx, edge_type)
+        h_inbound, h_outbound = h_inbound.to('cuda:0'), h_outbound.to('cuda:0')
+
         alpha = self.alpha_output(h_inbound, h_outbound)
         h = alpha * h_inbound + (1 - alpha) * h_outbound
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
 
-        h_prime = self.entity_layer(x, h)
+        h_prime = self.entity_layer(x.to('cuda:3'), h.to('cuda:3'))
         h_prime = F.normalize(h_prime, p=2, dim=2)
 
         h_prime = self._merge_heads(h_prime)
-        g_prime = self.relation_layer(g)
+        g_prime = self.relation_layer(g.to('cuda:3'))
 
-        return h_prime, g_prime
+        return h_prime.to('cuda:0'), g_prime.to('cuda:0')
 
 
 class KBNet(KB):
-    def __init__(self, x_size, g_size, hidden_size, output_size, heads, margin=1, negative_slope=0.2, device='cpu'):
+    def __init__(self, x_size, g_size, hidden_size, output_size, heads, margin=1, dropout=0.3, negative_slope=0.2,
+                 device='cpu'):
         super(KBNet, self).__init__()
-        self.input_layer = nn.DataParallel(RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device))
-        self.output_layer = nn.DataParallel(
-            RelationalAttentionLayer(heads * hidden_size, g_size, output_size, heads, device))
+        self.input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, dropout=dropout,
+                                                    device='cuda:1')
+        self.output_layer = RelationalAttentionLayer(heads * hidden_size, g_size, output_size, heads, dropout=dropout,
+                                                     device='cuda:1')
 
-        self.entity_layer = nn.DataParallel(EntityLayer(x_size, heads, output_size, device))
-        self.relation_layer = nn.DataParallel(RelationLayer(g_size, output_size, device))
+        self.entity_layer = EntityLayer(x_size, heads, output_size, device='cuda:2')
+        self.relation_layer = RelationLayer(g_size, output_size, device='cuda:2')
 
         self.loss_fct = nn.DataParallel(nn.MarginRankingLoss(margin=margin))
 
@@ -305,22 +318,22 @@ class KBNet(KB):
 
         torch.cuda.empty_cache()
 
-        h = self.input_layer(x, g, edge_idx, edge_type)
+        h = self.input_layer(x.to('cuda:1'), g.to('cuda:1'), edge_idx, edge_type)
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
         h = self._concat(h)
 
-        h = self.output_layer(h, g, edge_idx, edge_type)
+        h = self.output_layer(h.to('cuda:1'), g.to('cuda:1'), edge_idx, edge_type)
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
 
-        h_prime = self.entity_layer(x, h)
-        g_prime = self.relation_layer(g)
+        h_prime = self.entity_layer(x.to('cuda:2'), h.to('cuda:2'))
+        g_prime = self.relation_layer(g.to('cuda:2'))
 
         h_prime = F.normalize(h_prime, p=2, dim=2)
         h_prime = self._merge_heads(h_prime)
 
-        return h_prime, g_prime
+        return h_prime.to('cuda:0'), g_prime.to('cuda:0')
 
 
 class ConvKB(nn.Module):
