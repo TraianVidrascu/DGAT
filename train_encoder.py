@@ -32,10 +32,9 @@ def get_encoder(args, x_size, g_size):
 
     model = None
     if model_name == KBAT:
-        model = KBNet(x_size, g_size, h_size, o_size, heads, margin, negative_slope=negative_slope, device=dev)
+        model = KBNet(x_size, g_size, h_size, o_size, heads, margin, negative_slope=negative_slope)
     elif model_name == DKBAT:
-        model = DKBATNet(x_size, g_size, h_size, o_size, heads, alpha, margin, negative_slope=negative_slope,
-                         device=dev)
+        model = DKBATNet(x_size, g_size, h_size, o_size, heads, alpha, margin, negative_slope=negative_slope)
 
     return model
 
@@ -70,7 +69,7 @@ def train_encoder(args, model, data_loader):
     pos_edge_idx_aux = pos_edge_idx.repeat((1, negative_ratio))
     pos_edge_type_aux = pos_edge_type.repeat((1, negative_ratio))
 
-    batch_size = train_idx.shape[1] * 2  # for cluster * 5
+    batch_size = train_idx.shape[1] * 5  # for cluster * 5
     for epoch in range(first, epochs):
         model.train()
 
