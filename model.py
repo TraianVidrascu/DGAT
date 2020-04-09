@@ -230,7 +230,7 @@ class DKBATNet(KB):
                                                             device='cuda:1')
         self.outbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, dropout=dropout,
                                                              device='cuda:2')
-        self.alpha_input = AlphaLayer(hidden_size)
+        self.alpha_input = AlphaLayer(hidden_size, 'cuda:0')
 
         self.inbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads,
                                                              dropout=dropout,
@@ -254,6 +254,7 @@ class DKBATNet(KB):
         self.actv = nn.LeakyReLU(negative_slope)
 
     def forward(self, x, g, edge_idx, edge_type):
+        x, g, edge_idx, edge_type = x.to('cuda:0'), g.to('cuda:0'), edge_idx.to('cuda:0'), edge_type.to('cuda:0')
         x = F.normalize(x, p=2, dim=1).detach()
         torch.cuda.empty_cache()
 
@@ -264,9 +265,10 @@ class DKBATNet(KB):
                                              edge_type.to('cuda:1'))
         h_outbound = self.outbound_input_layer(x.to('cuda:2'), g.to('cuda:2'), outbound_edge_idx.to('cuda:2'),
                                                edge_type.to('cuda:2'))
-        h_inbound, h_outbound = h_inbound.to('cuda:0'), h_outbound.to('cuda:0')
 
+        h_inbound, h_outbound = h_inbound.to('cuda:0'), h_outbound.to('cuda:0')
         alpha = self.alpha_input(h_inbound, h_outbound)
+
         h = alpha * h_inbound + (1 - alpha) * h_outbound
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
