@@ -318,12 +318,12 @@ class KBNet(KB):
 
         torch.cuda.empty_cache()
 
-        h = self.input_layer(x.to('cuda:1'), g.to('cuda:1'), edge_idx, edge_type)
+        h = self.input_layer(x.to('cuda:1'), g.to('cuda:1'), edge_idx.to('cuda:1'), edge_type.to('cuda:1'))
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
         h = self._concat(h)
 
-        h = self.output_layer(h.to('cuda:1'), g.to('cuda:1'), edge_idx, edge_type)
+        h = self.output_layer(h.to('cuda:1'), g.to('cuda:1'), edge_idx.to('cuda:1'), edge_type.to('cuda:1'))
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
 
