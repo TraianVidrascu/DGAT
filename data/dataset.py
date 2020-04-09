@@ -107,8 +107,8 @@ class Dataset:
         torch.save(g, path_g)
         wandb.save(path_h)
         wandb.save(path_g)
-        path_h = osp.join(wandb.run.dir, 'h.pt')
-        path_g = osp.join(wandb.run.dir, 'g.pt')
+        path_h = osp.join(wandb.run.dir, 'h_' + model_name + '.pt')
+        path_g = osp.join(wandb.run.dir, 'g_' + model_name + '.pt')
         torch.save(h, path_h)
         torch.save(g, path_g)
 

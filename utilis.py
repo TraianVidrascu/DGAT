@@ -6,6 +6,7 @@ import wandb
 def save_model(model, metric, epoch, file):
     path = osp.join(wandb.run.dir, file)
     torch.save({'model_state_dict': model.state_dict(), 'epoch': epoch, 'metric': metric}, path)
+    wandb.save(path)
 
 
 def save_best(model, metric, epoch, file, asc=True):
