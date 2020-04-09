@@ -32,9 +32,9 @@ def get_encoder(args, x_size, g_size):
 
     model = None
     if model_name == KBAT:
-        model = KBNet(x_size, g_size, h_size, o_size, heads, margin, negative_slope=negative_slope)
+        model = KBNet(x_size, g_size, h_size, o_size, heads, margin, negative_slope=negative_slope,device=dev)
     elif model_name == DKBAT:
-        model = DKBATNet(x_size, g_size, h_size, o_size, heads, alpha, margin, negative_slope=negative_slope)
+        model = DKBATNet(x_size, g_size, h_size, o_size, heads, alpha, margin, negative_slope=negative_slope,device=dev)
 
     return model
 

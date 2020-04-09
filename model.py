@@ -6,7 +6,7 @@ from torch_scatter import scatter_add
 
 class RelationalAttentionLayer(nn.Module):
     def __init__(self, in_size_h, in_size_g, out_size, heads=2, concat=True, bias=True,
-                 negative_slope=1e-2, dropout=0.3):
+                 negative_slope=1e-2, dropout=0.3, device='cpu'):
         super(RelationalAttentionLayer, self).__init__()
         # forward layers
         self.fc1 = nn.Linear(2 * in_size_h + in_size_g, heads * out_size, bias=bias)
@@ -15,6 +15,9 @@ class RelationalAttentionLayer(nn.Module):
         self.weights_att = nn.Parameter(torch.Tensor(1, heads, out_size))
         self.att_actv = nn.LeakyReLU(negative_slope)
         self.att_softmax = nn.Softmax()
+
+        self.to(device)
+        self.device = device
 
         # dropout layer
         self.dropout = nn.Dropout(dropout)
@@ -139,11 +142,14 @@ class EntityLayer(nn.Module):
 
 
 class RelationLayer(nn.Module):
-    def __init__(self, in_size, out_size):
+    def __init__(self, in_size, out_size, device):
         super(RelationLayer, self).__init__()
         # relation layer
         self.weights_rel = nn.Linear(in_size, out_size)
         self.init_params()
+
+        self.to(device)
+        self.device = device
 
     def init_params(self):
         nn.init.xavier_normal_(self.weights_rel.weight, gain=1.414)
@@ -154,12 +160,15 @@ class RelationLayer(nn.Module):
 
 
 class AlphaLayer(nn.Module):
-    def __init__(self, h_size):
+    def __init__(self, h_size, device='cpu'):
         super(AlphaLayer, self).__init__()
         self.alpha = nn.Linear(2 * h_size, 1)
         self.actv = nn.Sigmoid()
 
         self.init_params()
+
+        self.to(device)
+        self.device = device
 
     def init_params(self):
         nn.init.xavier_normal_(self.alpha.weight, gain=1.414)
@@ -213,15 +222,16 @@ class KB(nn.Module):
 
 
 class DKBATNet(KB):
-    def __init__(self, x_size, g_size, hidden_size, output_size, heads, alpha=0.5, margin=1, negative_slope=0.2,):
+    def __init__(self, x_size, g_size, hidden_size, output_size, heads, alpha=0.5, margin=1, negative_slope=0.2,
+                 device='cpu'):
         super(DKBATNet, self).__init__()
-        self.inbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads)
-        self.outbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads)
+        self.inbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device)
+        self.outbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device)
         self.alpha_input = AlphaLayer(hidden_size)
 
-        self.inbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads,)
-        self.outbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads,
-                                                              )
+        self.inbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads, device)
+        self.outbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads, device)
+
         self.alpha_output = AlphaLayer(output_size)
 
         self.entity_layer = EntityLayer(x_size, heads, output_size)
@@ -270,13 +280,14 @@ class DKBATNet(KB):
 
 
 class KBNet(KB):
-    def __init__(self, x_size, g_size, hidden_size, output_size, heads, margin=1, negative_slope=0.2):
+    def __init__(self, x_size, g_size, hidden_size, output_size, heads, margin=1, negative_slope=0.2, device='cpu'):
         super(KBNet, self).__init__()
-        self.input_layer = nn.DataParallel(RelationalAttentionLayer(x_size, g_size, hidden_size, heads))
-        self.output_layer = nn.DataParallel(RelationalAttentionLayer(heads * hidden_size, g_size, output_size, heads))
+        self.input_layer = nn.DataParallel(RelationalAttentionLayer(x_size, g_size, hidden_size, heads, device))
+        self.output_layer = nn.DataParallel(
+            RelationalAttentionLayer(heads * hidden_size, g_size, output_size, heads, device))
 
-        self.entity_layer = nn.DataParallel(EntityLayer(x_size, heads, output_size))
-        self.relation_layer = nn.DataParallel(RelationLayer(g_size, output_size))
+        self.entity_layer = nn.DataParallel(EntityLayer(x_size, heads, output_size, device))
+        self.relation_layer = nn.DataParallel(RelationLayer(g_size, output_size, device))
 
         self.loss_fct = nn.DataParallel(nn.MarginRankingLoss(margin=margin))
 
@@ -284,6 +295,8 @@ class KBNet(KB):
         self.output_size = output_size
         self.hidden_size = hidden_size
 
+        self.to(device)
+        self.device = device
 
         self.actv = nn.LeakyReLU(negative_slope)
 
