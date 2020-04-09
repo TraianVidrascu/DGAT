@@ -70,7 +70,7 @@ def train_encoder(args, model, data_loader):
     pos_edge_idx_aux = pos_edge_idx.repeat((1, negative_ratio))
     pos_edge_type_aux = pos_edge_type.repeat((1, negative_ratio))
 
-    batch_size = train_idx.shape[1] * 5  # for cluster * 5
+    batch_size = train_idx.shape[1] * 10  # for cluster * 5
     for epoch in range(first, epochs):
         model.train()
 
