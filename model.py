@@ -244,7 +244,7 @@ class DKBATNet(KB):
         self.entity_layer = EntityLayer(x_size, heads, output_size, device='cuda:3')
         self.relation_layer = RelationLayer(g_size, output_size, device='cuda:3')
 
-        self.loss_fct = nn.DataParallel(nn.MarginRankingLoss(margin=margin))
+        self.loss_fct = nn.MarginRankingLoss(margin=margin).to('cuda:0')
 
         self.heads = heads
         self.output_size = output_size
@@ -260,8 +260,10 @@ class DKBATNet(KB):
         row, col = edge_idx
         outbound_edge_idx = torch.stack([col, row])
 
-        h_inbound = self.inbound_input_layer(x.to('cuda:1'), g.to('cuda:1'), edge_idx.to('cuda:1'), edge_type.to('cuda:1'))
-        h_outbound = self.outbound_input_layer(x.to('cuda:1'), g.to('cuda:1'), outbound_edge_idx.to('cuda:1'), edge_type.to('cuda:1'))
+        h_inbound = self.inbound_input_layer(x.to('cuda:1'), g.to('cuda:1'), edge_idx.to('cuda:1'),
+                                             edge_type.to('cuda:1'))
+        h_outbound = self.outbound_input_layer(x.to('cuda:1'), g.to('cuda:1'), outbound_edge_idx.to('cuda:1'),
+                                               edge_type.to('cuda:1'))
         h_inbound, h_outbound = h_inbound.to('cuda:0'), h_outbound.to('cuda:0')
 
         alpha = self.alpha_input(h_inbound, h_outbound)
@@ -272,8 +274,10 @@ class DKBATNet(KB):
 
         torch.cuda.empty_cache()
 
-        h_inbound = self.inbound_output_layer(h.to('cuda:2'), g.to('cuda:2'), edge_idx.to('cuda:2'), edge_type.to('cuda:2'))
-        h_outbound = self.outbound_output_layer(h.to('cuda:2'), g.to('cuda:2'), outbound_edge_idx.to('cuda:2'), edge_type.to('cuda:2'))
+        h_inbound = self.inbound_output_layer(h.to('cuda:2'), g.to('cuda:2'), edge_idx.to('cuda:2'),
+                                              edge_type.to('cuda:2'))
+        h_outbound = self.outbound_output_layer(h.to('cuda:2'), g.to('cuda:2'), outbound_edge_idx.to('cuda:2'),
+                                                edge_type.to('cuda:2'))
         h_inbound, h_outbound = h_inbound.to('cuda:0'), h_outbound.to('cuda:0')
 
         alpha = self.alpha_output(h_inbound, h_outbound)
@@ -302,12 +306,11 @@ class KBNet(KB):
         self.entity_layer = EntityLayer(x_size, heads, output_size, device='cuda:2')
         self.relation_layer = RelationLayer(g_size, output_size, device='cuda:2')
 
-        self.loss_fct = nn.DataParallel(nn.MarginRankingLoss(margin=margin))
+        self.loss_fct = nn.MarginRankingLoss(margin=margin).to('cuda:0')
 
         self.heads = heads
         self.output_size = output_size
         self.hidden_size = hidden_size
-
 
         self.actv = nn.LeakyReLU(negative_slope)
 
