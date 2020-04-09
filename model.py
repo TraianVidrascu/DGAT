@@ -308,8 +308,6 @@ class KBNet(KB):
         self.output_size = output_size
         self.hidden_size = hidden_size
 
-        self.to(device)
-        self.device = device
 
         self.actv = nn.LeakyReLU(negative_slope)
 
