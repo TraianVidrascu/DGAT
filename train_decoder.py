@@ -25,8 +25,9 @@ def get_decoder(args):
     input_size = args.output_encoder
     dev = args.device
 
-    model = ConvKB(input_dim=input_size, input_seq_len=3, in_channels=1, out_channels=channels, drop_prob=dropout,
-                   dev=dev)
+    model = torch.nn.DataParallel(
+        ConvKB(input_dim=input_size, input_seq_len=3, in_channels=1, out_channels=channels, drop_prob=dropout,
+               dev=dev))
     return model
 
 
