@@ -33,9 +33,10 @@ def get_encoder(args, x_size, g_size):
 
     model = None
     if model_name == KBAT:
-        model = KBNet(x_size, g_size, h_size, o_size, heads, margin,dropout, negative_slope=negative_slope,device=dev)
+        model = KBNet(x_size, g_size, h_size, o_size, heads, margin, dropout, negative_slope=negative_slope, device=dev)
     elif model_name == DKBAT:
-        model = DKBATNet(x_size, g_size, h_size, o_size, heads, alpha, margin,dropout, negative_slope=negative_slope,device=dev)
+        model = DKBATNet(x_size, g_size, h_size, o_size, heads, alpha, margin, dropout, negative_slope=negative_slope,
+                         device=dev)
 
     return model
 
@@ -72,53 +73,74 @@ def train_encoder(args, model, data_loader):
 
     batch_size = train_idx.shape[1] * 15  # for cluster * 5
     for epoch in range(first, epochs):
+        s_epoch = time.time()
         model.train()
 
         # negative sampling
+        s_sampling = time.time()
         neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio,
                                                                    'cpu')
+        t_sampling = time.time()
+
         # shuffling
+        s_shuffling = time.time()
         perm = torch.randperm(pos_edge_type_aux.shape[1])
         pos_edge_idx_aux = pos_edge_idx_aux[:, perm]
         pos_edge_type_aux = pos_edge_type_aux[:, perm]
+        t_shuffling = time.time()
 
         m = pos_edge_idx_aux.shape[1]
         iterations = torch.tensor([i for i in range(m)]).long()
 
         losses_epoch = []
 
-        s_e = time.time()
         for itt in range(0, m, batch_size):
-            s = time.time()
+            s_batch = time.time()
             batch = iterations[itt:itt + batch_size]
 
+            s_forward = time.time()
             h_prime, g_prime = model(x, g, train_idx.to(dev), train_type.to(dev))
+            t_forward = time.time()
 
+            s_slicing = time.time()
             pos_edge_idx_batch = pos_edge_idx_aux[:, batch].to(dev)
             pos_edge_type_batch = pos_edge_type_aux[:, batch].to(dev)
             neg_edge_idx_batch = neg_edge_idx[:, batch].to(dev)
             neg_edge_type_batch = neg_edge_type[:, batch].to(dev)
+            t_slicing = time.time()
 
+            s_loss = time.time()
             loss = model.loss(h_prime, g_prime,
                               pos_edge_idx_batch,
                               pos_edge_type_batch,
                               neg_edge_idx_batch,
                               neg_edge_type_batch)
+            t_loss = time.time()
 
             torch.cuda.empty_cache()
 
             # optimization
+            s_optim = time.time()
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            t_optim = time.time()
 
             losses_epoch.append(loss.item())
-            t = time.time()
-            print('Batch time: %.2f' % (t - s))
+
+            t_batch = time.time()
+
+            print('Batch time: %.2f' % (t_batch - s_batch) +
+                  'Forward time: %.2f' % (t_forward - s_forward) +
+                  'Slicing time: %.2f' % (t_slicing - s_slicing) +
+                  'Loss time: %.2f' % (t_loss - s_loss) +
+                  'Optim time: %.2f' % (t_optim - s_optim))
         loss_epoch = sum(losses_epoch) / len(losses_epoch)
 
-        t_e = time.time()
-        print('Epoch time: %.4f' % (t_e - s_e))
+        t_epcoh = time.time()
+        print('Epoch time: %.4f' % (t_epcoh - s_epoch) +
+              'Sampling time: %.4f' % (t_sampling - s_sampling) +
+              'Shuffling time: %.4f' % (t_shuffling - s_shuffling))
 
         scheduler.step()
         save_best(model, loss_epoch, epoch + 1, encoder_file, asc=False)
