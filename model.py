@@ -343,14 +343,18 @@ class ConvKB(nn.Module):
     def __init__(self, input_dim, input_seq_len, in_channels, out_channels, drop_prob=0.0, dev='cpu'):
         super().__init__()
 
-        self.conv_layer = nn.DataParallel(nn.Conv2d(
-            in_channels, out_channels, (1, input_seq_len)))  # kernel size -> 1*input_seq_length(i.e. 2)
+        self.conv_layer = nn.Conv2d(
+            in_channels, out_channels, (1, input_seq_len)) # kernel size -> 1*input_seq_length(i.e. 2)
         self.dropout = nn.Dropout(drop_prob)
         self.non_linearity = nn.ReLU()
-        self.fc_layer = nn.DataParallel(nn.Linear((input_dim) * out_channels, 1))
+        self.fc_layer = nn.Linear((input_dim) * out_channels, 1)
 
         nn.init.xavier_uniform_(self.fc_layer.weight, gain=1.414)
         nn.init.xavier_uniform_(self.conv_layer.weight, gain=1.414)
+
+        self.conv_layer = nn.DataParallel(self.conv_layer)
+        self.fc_layer = nn.DataParallel(self.fc_layer)
+        
         self.dev = dev
         self.to(dev)
 
