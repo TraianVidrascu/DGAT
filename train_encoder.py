@@ -130,17 +130,19 @@ def train_encoder(args, model, data_loader):
 
             t_batch = time.time()
 
-            print('Batch time: %.2f' % (t_batch - s_batch) +
-                  'Forward time: %.2f' % (t_forward - s_forward) +
-                  'Slicing time: %.2f' % (t_slicing - s_slicing) +
-                  'Loss time: %.2f' % (t_loss - s_loss) +
-                  'Optim time: %.2f' % (t_optim - s_optim))
+            if args.debug == 1:
+                wandb.log({'Batch time: %.2f': (t_batch - s_batch),
+                           'Forward time: %.2f': (t_forward - s_forward),
+                           'Slicing time: %.2f': (t_slicing - s_slicing),
+                           'Loss time: %.2f': (t_loss - s_loss),
+                           'Optim time: %.2f': (t_optim - s_optim)})
         loss_epoch = sum(losses_epoch) / len(losses_epoch)
 
         t_epcoh = time.time()
-        print('Epoch time: %.4f' % (t_epcoh - s_epoch) +
-              'Sampling time: %.4f' % (t_sampling - s_sampling) +
-              'Shuffling time: %.4f' % (t_shuffling - s_shuffling))
+        if args.debug == 1:
+            wandb.log({'Epoch time: %.4f': (t_epcoh - s_epoch),
+                       'Sampling time: %.4f': (t_sampling - s_sampling),
+                       'Shuffling time: %.4f': (t_shuffling - s_shuffling)})
 
         scheduler.step()
         save_best(model, loss_epoch, epoch + 1, encoder_file, asc=False)
