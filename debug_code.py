@@ -271,7 +271,3 @@ from dataloader import DataLoader
 # tensor = torch.randn((2,10))
 # my_list = tensor.tolist()
 # print(my_list)
-
-dataset = FB15Dataset()
-
-dataset.filter_evaluation_folds()
