@@ -9,10 +9,10 @@ class RelationalAttentionLayer(nn.Module):
                  negative_slope=1e-2, dropout=0.3, device='cpu'):
         super(RelationalAttentionLayer, self).__init__()
         # forward layers
-        self.fc1 = nn.Linear(2 * in_size_h + in_size_g, heads * out_size, bias=bias)
+        self.fc1 = nn.DataParallel(nn.Linear(2 * in_size_h + in_size_g, heads * out_size, bias=bias))
 
         # attention layers
-        self.weights_att = nn.Parameter(torch.Tensor(1, heads, out_size))
+        self.weights_att = nn.DataParallel(nn.Parameter(torch.Tensor(1, heads, out_size), requires_grad=True))
         self.att_actv = nn.LeakyReLU(negative_slope)
         self.att_softmax = nn.Softmax()
 
@@ -127,7 +127,7 @@ class EntityLayer(nn.Module):
     def __init__(self, initial_size, heads, layer_size, device='cpu'):
         super(EntityLayer, self).__init__()
         # entity embedding
-        self.weights_ent = nn.Linear(initial_size, layer_size)
+        self.weights_ent = nn.DataParallel(nn.Linear(initial_size, layer_size))
         self.init_params()
         self.to(device)
         self.heads = heads
@@ -145,7 +145,7 @@ class RelationLayer(nn.Module):
     def __init__(self, in_size, out_size, device):
         super(RelationLayer, self).__init__()
         # relation layer
-        self.weights_rel = nn.Linear(in_size, out_size)
+        self.weights_rel = nn.DataParallel(nn.Linear(in_size, out_size))
         self.init_params()
 
         self.to(device)
@@ -162,7 +162,7 @@ class RelationLayer(nn.Module):
 class AlphaLayer(nn.Module):
     def __init__(self, h_size, device='cpu'):
         super(AlphaLayer, self).__init__()
-        self.alpha = nn.Linear(2 * h_size, 1)
+        self.alpha = nn.DataParallel(nn.Linear(2 * h_size, 1))
         self.actv = nn.Sigmoid()
 
         self.init_params()
@@ -227,24 +227,24 @@ class DKBATNet(KB):
                  device='cpu'):
         super(DKBATNet, self).__init__()
         self.inbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, dropout=dropout,
-                                                            device='cuda:1')
+                                                            device='cuda')
         self.outbound_input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, dropout=dropout,
-                                                             device='cuda:2')
-        self.alpha_input = AlphaLayer(hidden_size, 'cuda:0')
+                                                             device='cuda')
+        self.alpha_input = AlphaLayer(hidden_size, 'cuda')
 
         self.inbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads,
                                                              dropout=dropout,
-                                                             device='cuda:1')
+                                                             device='cuda')
         self.outbound_output_layer = RelationalAttentionLayer(hidden_size * heads, g_size, output_size, heads,
                                                               dropout=dropout,
-                                                              device='cuda:2')
+                                                              device='cuda')
 
-        self.alpha_output = AlphaLayer(output_size, 'cuda:0')
+        self.alpha_output = AlphaLayer(output_size, 'cuda')
 
-        self.entity_layer = EntityLayer(x_size, heads, output_size, device='cuda:1')
-        self.relation_layer = RelationLayer(g_size, output_size, device='cuda:2')
+        self.entity_layer = EntityLayer(x_size, heads, output_size, device='cuda')
+        self.relation_layer = RelationLayer(g_size, output_size, device='cuda')
 
-        self.loss_fct = nn.MarginRankingLoss(margin=margin).to('cuda:0')
+        self.loss_fct = nn.DataParallel(nn.MarginRankingLoss(margin=margin).to('cuda'))
 
         self.heads = heads
         self.output_size = output_size
@@ -254,19 +254,20 @@ class DKBATNet(KB):
         self.actv = nn.LeakyReLU(negative_slope)
 
     def forward(self, x, g, edge_idx, edge_type):
-        x, g, edge_idx, edge_type = x.to('cuda:0'), g.to('cuda:0'), edge_idx.to('cuda:0'), edge_type.to('cuda:0')
+        x, g, edge_idx, edge_type = x.to('cuda'), g.to('cuda'), edge_idx.to('cuda'), edge_type.to('cuda')
+        x, g, edge_idx, edge_type = x.to('cuda'), g.to('cuda'), edge_idx.to('cuda'), edge_type.to('cuda')
         x = F.normalize(x, p=2, dim=1).detach()
         torch.cuda.empty_cache()
 
         row, col = edge_idx
         outbound_edge_idx = torch.stack([col, row])
 
-        h_inbound = self.inbound_input_layer(x.to('cuda:1'), g.to('cuda:1'), edge_idx.to('cuda:1'),
-                                             edge_type.to('cuda:1'))
-        h_outbound = self.outbound_input_layer(x.to('cuda:2'), g.to('cuda:2'), outbound_edge_idx.to('cuda:2'),
-                                               edge_type.to('cuda:2'))
+        h_inbound = self.inbound_input_layer(x.to('cuda'), g.to('cuda'), edge_idx.to('cuda'),
+                                             edge_type.to('cuda'))
+        h_outbound = self.outbound_input_layer(x.to('cuda'), g.to('cuda'), outbound_edge_idx.to('cuda'),
+                                               edge_type.to('cuda'))
 
-        h_inbound, h_outbound = h_inbound.to('cuda:0'), h_outbound.to('cuda:0')
+        h_inbound, h_outbound = h_inbound.to('cuda'), h_outbound.to('cuda')
         alpha = self.alpha_input(h_inbound, h_outbound)
 
         h = alpha * h_inbound + (1 - alpha) * h_outbound
@@ -276,24 +277,24 @@ class DKBATNet(KB):
 
         torch.cuda.empty_cache()
 
-        h_inbound = self.inbound_output_layer(h.to('cuda:1'), g.to('cuda:1'), edge_idx.to('cuda:1'),
-                                              edge_type.to('cuda:1'))
-        h_outbound = self.outbound_output_layer(h.to('cuda:2'), g.to('cuda:2'), outbound_edge_idx.to('cuda:2'),
-                                                edge_type.to('cuda:2'))
-        h_inbound, h_outbound = h_inbound.to('cuda:0'), h_outbound.to('cuda:0')
+        h_inbound = self.inbound_output_layer(h.to('cuda'), g.to('cuda'), edge_idx.to('cuda'),
+                                              edge_type.to('cuda'))
+        h_outbound = self.outbound_output_layer(h.to('cuda'), g.to('cuda'), outbound_edge_idx.to('cuda'),
+                                                edge_type.to('cuda'))
+        h_inbound, h_outbound = h_inbound.to('cuda'), h_outbound.to('cuda')
 
         alpha = self.alpha_output(h_inbound, h_outbound)
         h = alpha * h_inbound + (1 - alpha) * h_outbound
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
 
-        h_prime = self.entity_layer(x.to('cuda:1'), h.to('cuda:1'))
+        h_prime = self.entity_layer(x.to('cuda'), h.to('cuda'))
         h_prime = F.normalize(h_prime, p=2, dim=2)
 
         h_prime = self._merge_heads(h_prime)
-        g_prime = self.relation_layer(g.to('cuda:2'))
+        g_prime = self.relation_layer(g.to('cud'))
 
-        return h_prime.to('cuda:0'), g_prime.to('cuda:0')
+        return h_prime.to('cuda'), g_prime.to('cuda')
 
 
 class KBNet(KB):
@@ -301,14 +302,14 @@ class KBNet(KB):
                  device='cpu'):
         super(KBNet, self).__init__()
         self.input_layer = RelationalAttentionLayer(x_size, g_size, hidden_size, heads, dropout=dropout,
-                                                    device='cuda:1')
+                                                    device='cuda')
         self.output_layer = RelationalAttentionLayer(heads * hidden_size, g_size, output_size, heads, dropout=dropout,
-                                                     device='cuda:1')
+                                                     device='cuda')
 
-        self.entity_layer = EntityLayer(x_size, heads, output_size, device='cuda:2')
-        self.relation_layer = RelationLayer(g_size, output_size, device='cuda:2')
+        self.entity_layer = EntityLayer(x_size, heads, output_size, device='cuda')
+        self.relation_layer = RelationLayer(g_size, output_size, device='cuda')
 
-        self.loss_fct = nn.MarginRankingLoss(margin=margin).to('cuda:0')
+        self.loss_fct = nn.MarginRankingLoss(margin=margin).to('cuda')
 
         self.heads = heads
         self.output_size = output_size
@@ -321,22 +322,22 @@ class KBNet(KB):
 
         torch.cuda.empty_cache()
 
-        h = self.input_layer(x.to('cuda:1'), g.to('cuda:1'), edge_idx.to('cuda:1'), edge_type.to('cuda:1'))
+        h = self.input_layer(x.to('cuda'), g.to('cuda'), edge_idx.to('cuda'), edge_type.to('cuda'))
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
         h = self._concat(h)
 
-        h = self.output_layer(h.to('cuda:1'), g.to('cuda:1'), edge_idx.to('cuda:1'), edge_type.to('cuda:1'))
+        h = self.output_layer(h.to('cuda'), g.to('cuda'), edge_idx.to('cuda'), edge_type.to('cuda'))
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
 
-        h_prime = self.entity_layer(x.to('cuda:2'), h.to('cuda:2'))
-        g_prime = self.relation_layer(g.to('cuda:2'))
+        h_prime = self.entity_layer(x.to('cuda'), h.to('cuda'))
+        g_prime = self.relation_layer(g.to('cuda'))
 
         h_prime = F.normalize(h_prime, p=2, dim=2)
         h_prime = self._merge_heads(h_prime)
 
-        return h_prime.to('cuda:0'), g_prime.to('cuda:0')
+        return h_prime.to('cuda'), g_prime.to('cuda')
 
 
 class ConvKB(nn.Module):
