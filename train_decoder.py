@@ -136,7 +136,7 @@ def main():
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval", type=int, default=200, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=bool, default=True, help="Debugging mod.")
+    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=200, help="Number of training epochs for decoder.")

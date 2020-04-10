@@ -354,7 +354,7 @@ class ConvKB(nn.Module):
 
         self.conv_layer = nn.DataParallel(self.conv_layer)
         self.fc_layer = nn.DataParallel(self.fc_layer)
-        
+
         self.dev = dev
         self.to(dev)
 
