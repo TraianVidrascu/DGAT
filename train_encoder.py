@@ -71,7 +71,7 @@ def train_encoder(args, model, data_loader):
     pos_edge_idx_aux = pos_edge_idx.repeat((1, negative_ratio))
     pos_edge_type_aux = pos_edge_type.repeat((1, negative_ratio))
 
-    batch_size = train_idx.shape[1] * 15  # for cluster * 5
+    batch_size = train_idx.shape[1] * 10  # for cluster * 5
     for epoch in range(first, epochs):
         s_epoch = time.time()
         model.train()
@@ -191,7 +191,7 @@ def main():
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval", type=int, default=3000, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=bool, default=1, help="Debugging mod.")
+    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
