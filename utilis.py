@@ -42,6 +42,14 @@ def load_decoder_eval(model, rundir, model_name, dataset_name):
     return model
 
 
+def load_encoder_eval(model, rundir, model_name, dataset_name):
+    path = osp.join(rundir, 'decoder_' + model_name.lower() + '_' + dataset_name.lower() + '.pt')
+    if osp.exists(path):
+        model_dict = torch.load(path)
+        model.load_state_dict(model_dict['model_state_dict'])
+    return model
+
+
 def set_random_seed():
     if torch.cuda.is_available():
         torch.cuda.manual_seed(42)
