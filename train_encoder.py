@@ -65,8 +65,10 @@ def train_encoder(args, model, data_loader):
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=0.5, last_epoch=-1)
 
-    train_idx, train_type, pos_edge_idx, pos_edge_type = data_loader.graph2paths(graph, dev='cpu')
+    train_idx, train_type = data_loader.graph2idx(graph, dev='cpu')
     n = x.shape[0]
+
+    pos_edge_idx, pos_edge_type = train_idx[:, :], train_type[:]
 
     pos_edge_idx_aux = pos_edge_idx.repeat((1, negative_ratio))
     pos_edge_type_aux = pos_edge_type.repeat((1, negative_ratio))

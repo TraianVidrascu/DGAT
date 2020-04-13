@@ -49,24 +49,14 @@ class DataLoader:
         return edge_idx, edge_type
 
     @staticmethod
-    def graph2idx(graph, paths=False, dev='cpu'):
+    def graph2idx(graph, dev='cpu'):
         edges = list(map(lambda x: [x[0], x[1], x[2]['label']], graph.edges(data=True)))
 
         edges = torch.tensor(edges).long()
         edge_idx = edges[:, 0:2].t()
         edge_type = edges[:, 2]
-        if paths:
-            edge_type = torch.stack([edge_type, -torch.ones(edge_type.shape[0]).long()])
 
         return edge_idx.to(dev), edge_type.to(dev)
-
-    def graph2paths(self, graph, dev='cpu'):
-        edge_idx, edge_type = DataLoader.graph2idx(graph, paths=True, dev=dev)
-
-        path_idx, path_type = self.load_paths()
-        path_idx = torch.cat([edge_idx, path_idx], dim=1)
-        path_type = torch.cat([edge_type, path_type], dim=1)
-        return edge_idx.to(dev), edge_type.to(dev), path_idx.to(dev), path_type.to(dev)
 
     @staticmethod
     def corrupt_triplet(n, triplet, head=True):

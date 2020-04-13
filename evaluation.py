@@ -9,20 +9,42 @@ from train_decoder import get_decoder
 from train_encoder import KBAT, DKBAT, get_encoder
 from utilis import load_decoder_eval, load_encoder_eval
 
-RUN_DIR = './eval_dir'
+import os.path as osp
+
+ENCODER_DIR = './eval_dir/encoder'
+DECODER_DIR = './eval_dir/decoder'
+EMBEDDING_DIR = './eval_dir/embeddings'
 
 
 def evaluate_encoder(data_loader, fold, encoder, embedding_model, head, dev='cpu'):
-    x, g, graph = data_loader.load_train()
-    edge_idx, edge_idx = DataLoader.graph2idx(graph, paths=True, dev=dev)
+    x, g, graph = data_loader.load_train(dev)
+    edge_idx, edge_type = DataLoader.graph2idx(graph, paths=True, dev=dev)
     with torch.no_grad():
         encoder.eval()
-        h, g = encoder(edge_idx, edge_idx)
+        h, g = encoder(x, g, edge_idx, edge_type)
 
     metrics = get_model_metrics_head_or_tail(data_loader, h, g, fold, encoder, 'encoder', head, dev=dev)
     print(embedding_model + data_loader.get_name() + ' ' + fold + ' metrics:')
     print(metrics)
     wandb.log(metrics)
+
+
+def save_embedding(data_loader, encoder, embedding_model, dev='cpu'):
+    x, g, graph = data_loader.load_train(dev)
+    edge_idx, edge_type = DataLoader.graph2idx(graph, paths=True, dev=dev)
+    with torch.no_grad():
+        encoder.eval()
+        h, g = encoder(x, g, edge_idx, edge_type)
+
+    data_name = data_loader.get_name()
+    h_file = 'h_' + embedding_model + '_' + data_name + '.pt'
+    g_file = 'g_' + embedding_model + '_' + data_name + '.pt'
+
+    h_path = osp.join(EMBEDDING_DIR, h_file)
+    g_path = osp.join(EMBEDDING_DIR, g_file)
+
+    torch.save(h, h_path)
+    torch.save(g, g_path)
 
 
 def evaluate_decoder(data_loader, fold, decoder, run_dir, model_name, head, dev='cpu'):
@@ -55,11 +77,17 @@ def main_encoder():
     parser.add_argument("--fold", type=str, default='test', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
+    parser.add_argument("--save", type=int, default=1, help="Save node embedding.")
+    parser.add_argument("--eval", type=int, default=0, help="Evaluate encoder.")
+
     args, cmdline_args = parser.parse_known_args()
 
     model_name = args.model + "_encoder"
     head = True if args.head == 1 else 0
     prefix = 'head' if head else 'tail'
+
+    save = True if args.save == 1 else 0
+    eval = True if args.eval == 1 else 0
 
     fold = args.fold
     if args.dataset == 'FB15k-237':
@@ -76,11 +104,16 @@ def main_encoder():
     model = get_encoder(args, x_size, g_size)
 
     dataset_name = data_loader.get_name()
-    model = load_encoder_eval(model, RUN_DIR, model_name, dataset_name)
+    model = load_encoder_eval(model, ENCODER_DIR, model_name, dataset_name)
 
     fold = args.fold
     head = args.head
-    evaluate_encoder(data_loader, fold, model, args.model, head, dev=args.device)
+
+    if save:
+        save_embedding(data_loader, model, args.model, dev=args.device)
+
+    if eval:
+        evaluate_encoder(data_loader, fold, model, args.model, head, dev=args.device)
 
 
 def main_decoder():
@@ -115,7 +148,7 @@ def main_decoder():
 
     wandb.init(project=args.model + '_' + dataset.name + '_' + fold + '_' + prefix + '_eval', config=args)
 
-    evaluate_decoder(data_loader, fold, decoder, RUN_DIR, model_name, head, dev=args.device)
+    evaluate_decoder(data_loader, fold, decoder, DECODER_DIR, model_name, head, dev=args.device)
 
 
 if __name__ == '__main__':
