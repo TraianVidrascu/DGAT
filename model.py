@@ -74,22 +74,11 @@ class RelationalAttentionLayer(nn.Module):
         return alpha
 
     def _compute_edges(self, edge_idx, edge_type, h, g):
+        torch.cuda.empty_cache()
+
         row, col = edge_idx
-
-        # extract embeddings for entities and relations
-        h_i = h[row]
-        h_j = h[col]
-
-        # add zero embeddings for paths of only one hop
-        g_size = g.shape[1]
-        g_zeros = torch.zeros((1, g_size)).type_as(g).to(g.device)
-        g_aux = torch.cat([g, g_zeros], dim=0)
-
-        k_1, k2 = edge_type
-        g_k = g_aux[k_1] + g_aux[k2]
-
         # concatenate the 3 representations
-        h_ijk = torch.cat([h_i, h_j, g_k], dim=1)
+        h_ijk = torch.cat([h[row], h[col], g[edge_type]], dim=1)
         # obtain edge representation
         c_ijk = self.fc1(h_ijk).view(-1, self.heads, self.out_size)
 
@@ -187,15 +176,7 @@ class KB(nn.Module):
     @staticmethod
     def _dissimilarity(h, g, edge_idx, edge_type):
         row, col = edge_idx
-
-        if len(edge_type.shape) == 2:
-            g_size = g.shape[1]
-            g_zeros = torch.zeros((1, g_size)).type_as(g).to(g.device)
-            g_aux = torch.cat([g, g_zeros], dim=0)
-            k_1, k2 = edge_type
-            d_norm = torch.norm(h[row] + g_aux[k_1] + g_aux[k2] - h[col], p=1, dim=1)
-        else:
-            d_norm = torch.norm(h[row] + g[edge_type] - h[col], p=1, dim=1)
+        d_norm = torch.norm(h[row] + g[edge_type] - h[col], p=1, dim=1)
         return d_norm
 
     def loss(self, h_prime, g_prime, pos_edge_idx, pos_edge_type, neg_edge_idx, neg_edge_type):
@@ -264,7 +245,7 @@ class DKBATNet(KB):
         outbound_edge_idx = torch.stack([col, row])
 
         h_inbound = self.inbound_input_layer(x, g, edge_idx, edge_type)
-        h_outbound = self.outbound_input_layer(x, g, outbound_edge_idx,edge_type)
+        h_outbound = self.outbound_input_layer(x, g, outbound_edge_idx, edge_type)
 
         h_inbound, h_outbound = h_inbound, h_outbound
         alpha = self.alpha_input(h_inbound, h_outbound)

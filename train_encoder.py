@@ -47,17 +47,18 @@ def train_encoder(args, model, data_loader):
     eval = args.eval
 
     # training parameters
-    negative_ratio = 2
     lr = args.lr
     decay = args.decay
     epochs = args.epochs
     step_size = args.step_size
+    batch_size = args.batch
+    negative_ratio = args.negative_ratio
 
     dataset_name = data_loader.get_name()
     encoder_file = ENCODER + '_' + args.model.lower() + '_' + dataset_name.lower() + '.pt'
 
     # load data
-    x, g, graph = data_loader.load_train(dev)
+    x, g, graph = data_loader.load_train('cpu')
     wandb.watch(model, log="all")
 
     first = 0
@@ -68,47 +69,45 @@ def train_encoder(args, model, data_loader):
     train_idx, train_type = data_loader.graph2idx(graph, dev='cpu')
     n = x.shape[0]
 
-    pos_edge_idx, pos_edge_type = train_idx[:, :], train_type[:]
+    edge_idx, edge_type = train_idx[:, :], train_type[:]
 
-    pos_edge_idx_aux = pos_edge_idx.repeat((1, negative_ratio))
-    pos_edge_type_aux = pos_edge_type.repeat((1, negative_ratio))
-
-    batch_size = train_idx.shape[1] * 10  # for cluster * 5
     for epoch in range(first, epochs):
         s_epoch = time.time()
         model.train()
 
-        # negative sampling
-        s_sampling = time.time()
-        neg_edge_idx, neg_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type, negative_ratio,
-                                                                   'cpu')
-        t_sampling = time.time()
-
-        # shuffling
+        # # shuffling positive edges
         s_shuffling = time.time()
-        perm = torch.randperm(pos_edge_type_aux.shape[1])
-        pos_edge_idx_aux = pos_edge_idx_aux[:, perm]
-        pos_edge_type_aux = pos_edge_type_aux[:, perm]
+        perm = torch.randperm(edge_idx.shape[1])
+        pos_edge_idx = edge_idx[:, perm]
+        pos_edge_type = edge_type[perm]
         t_shuffling = time.time()
 
-        m = pos_edge_idx_aux.shape[1]
-        iterations = torch.tensor([i for i in range(m)]).long()
+        # negative sampling and arranging data
+        s_sampling = time.time()
+        pos_edge_idx, neg_edge_idx, pos_edge_type = data_loader.negative_samples(n, pos_edge_idx, pos_edge_type,
+                                                                                 negative_ratio,
+                                                                                 'cpu')
+        t_sampling = time.time()
 
         losses_epoch = []
-
-        for itt in range(0, m, batch_size):
+        m = pos_edge_idx.shape[1]
+        for itt in range(0, m, batch_size * negative_ratio):
             s_batch = time.time()
-            batch = iterations[itt:itt + batch_size]
+            # establish batch limit
+            start = itt
+            end = itt + batch_size * negative_ratio
 
+            # forward pass the model; getting the node embeddings
             s_forward = time.time()
-            h_prime, g_prime = model(x, g, train_idx.to(dev), train_type.to(dev))
+            h_prime, g_prime = model(x.to(dev), g.to(dev), train_idx.to(dev), train_type.to(dev))
             t_forward = time.time()
 
+            # getting
             s_slicing = time.time()
-            pos_edge_idx_batch = pos_edge_idx_aux[:, batch].to(dev)
-            pos_edge_type_batch = pos_edge_type_aux[:, batch].to(dev)
-            neg_edge_idx_batch = neg_edge_idx[:, batch].to(dev)
-            neg_edge_type_batch = neg_edge_type[:, batch].to(dev)
+            pos_edge_idx_batch = pos_edge_idx[:, start:end].to(dev)
+            pos_edge_type_batch = pos_edge_type[start:end].to(dev)
+            neg_edge_idx_batch = neg_edge_idx[:, start:end].to(dev)
+            neg_edge_type_batch = pos_edge_type[start:end].to(dev)
             t_slicing = time.time()
 
             s_loss = time.time()
@@ -133,18 +132,19 @@ def train_encoder(args, model, data_loader):
             t_batch = time.time()
 
             if args.debug == 1:
-                wandb.log({'Batch time: %.2f': (t_batch - s_batch),
-                           'Forward time: %.2f': (t_forward - s_forward),
-                           'Slicing time: %.2f': (t_slicing - s_slicing),
-                           'Loss time: %.2f': (t_loss - s_loss),
-                           'Optim time: %.2f': (t_optim - s_optim)})
+                print('Batch time: %.2f ' % (t_batch - s_batch) +
+                      'Forward time: %.2f ' % (t_forward - s_forward) +
+                      'Slicing time: %.2f ' % (t_slicing - s_slicing) +
+                      'Loss time: %.2f ' % (t_loss - s_loss) +
+                      'Optim time: %.2f ' % (t_optim - s_optim))
+
         loss_epoch = sum(losses_epoch) / len(losses_epoch)
 
         t_epcoh = time.time()
         if args.debug == 1:
-            wandb.log({'Epoch time: %.4f': (t_epcoh - s_epoch),
-                       'Sampling time: %.4f': (t_sampling - s_sampling),
-                       'Shuffling time: %.4f': (t_shuffling - s_shuffling)})
+            print('Epoch time: %.4f ' % (t_epcoh - s_epoch) +
+                  'Sampling time: %.4f ' % (t_sampling - s_sampling) +
+                  'Shuffling time: %.4f ' % (t_shuffling - s_shuffling))
 
         scheduler.step()
         save_best(model, loss_epoch, epoch + 1, encoder_file, asc=False)
@@ -170,7 +170,7 @@ def embed_nodes(args, encoder, data):
 
     data_loader = DataLoader(data)
     x, g, graph = data_loader.load_train(dev)
-    edge_idx, edge_type = data_loader.graph2idx(graph, paths=True, dev=dev)
+    edge_idx, edge_type = data_loader.graph2idx(graph, dev=dev)
 
     encoder.eval()
     with torch.no_grad():
@@ -192,16 +192,18 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=3000, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
+    parser.add_argument("--eval", type=int, default=1500, help="After how many epochs to evaluate.")
+    parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
+    parser.add_argument("--epochs", type=int, default=1000, help="Number of training epochs for encoder.")
     parser.add_argument("--step_size", type=int, default=500, help="Step size of scheduler.")
-    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
+    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
+    parser.add_argument("--batch", type=int, default=27210, help="Batch size.")
+    parser.add_argument("--negative_ratio", type=int, default=20, help="Number of negative edges per positive one.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")

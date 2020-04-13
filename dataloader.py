@@ -133,15 +133,12 @@ class DataLoader:
 
     @staticmethod
     def negative_samples(n, edge_idx, edge_type, negative_ratio, dev='cpu'):
+        # put negative sample of same edge together
+        pos_edge_idx = edge_idx.repeat((negative_ratio, 1)).t().flatten().view(-1, 2).t()
+        edge_type = edge_type[None, :].repeat((negative_ratio, 1)).t().flatten()
 
-        edge_idx_aux = edge_idx.repeat((1, negative_ratio))
-        row, col = edge_idx_aux
+        row, col = pos_edge_idx
         m = row.shape[0]
-
-        if len(edge_type.shape) == 1:
-            neg_type = edge_type.repeat(negative_ratio)
-        else:
-            neg_type = edge_type.repeat((1, negative_ratio))
 
         # corrupt head triplet
         head_corrupted = torch.randint(size=(m,), high=n).to(dev)
@@ -153,8 +150,8 @@ class DataLoader:
 
         # negative samples, bernoulli sample tail or head
         sample = (torch.rand(size=(m,)) > 0.5).long()
-        neg_idx = edge_idx_aux
+        neg_idx = pos_edge_idx.clone()
         neg_idx[0, sample == 0] = head_corrupted[sample == 0]
         neg_idx[1, sample == 1] = tail_corrupted[sample == 1]
 
-        return neg_idx.to(dev), neg_type.to(dev)
+        return pos_edge_idx.to(dev), neg_idx.to(dev), edge_type.to(dev)

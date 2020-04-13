@@ -18,7 +18,7 @@ EMBEDDING_DIR = './eval_dir/embeddings'
 
 def evaluate_encoder(data_loader, fold, encoder, embedding_model, head, dev='cpu'):
     x, g, graph = data_loader.load_train(dev)
-    edge_idx, edge_type = DataLoader.graph2idx(graph, paths=True, dev=dev)
+    edge_idx, edge_type = DataLoader.graph2idx(graph, dev=dev)
     with torch.no_grad():
         encoder.eval()
         h, g = encoder(x, g, edge_idx, edge_type)
@@ -31,7 +31,7 @@ def evaluate_encoder(data_loader, fold, encoder, embedding_model, head, dev='cpu
 
 def save_embedding(data_loader, encoder, embedding_model, dev='cpu'):
     x, g, graph = data_loader.load_train(dev)
-    edge_idx, edge_type = DataLoader.graph2idx(graph, paths=True, dev=dev)
+    edge_idx, edge_type = DataLoader.graph2idx(graph, dev=dev)
     with torch.no_grad():
         encoder.eval()
         h, g = encoder(x, g, edge_idx, edge_type)
