@@ -37,8 +37,8 @@ def save_embedding(data_loader, encoder, embedding_model, dev='cpu'):
         h, g = encoder(x, g, edge_idx, edge_type)
 
     data_name = data_loader.get_name()
-    h_file = 'h_' + embedding_model + '_' + data_name + '.pt'
-    g_file = 'g_' + embedding_model + '_' + data_name + '.pt'
+    h_file = 'h_' + embedding_model.lower() + '_' + data_name.lower() + '.pt'
+    g_file = 'g_' + embedding_model.lower() + '_' + data_name.lower() + '.pt'
 
     h_path = osp.join(EMBEDDING_DIR, h_file)
     g_path = osp.join(EMBEDDING_DIR, g_file)
@@ -78,11 +78,11 @@ def main_encoder():
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
     parser.add_argument("--save", type=int, default=1, help="Save node embedding.")
-    parser.add_argument("--eval", type=int, default=0, help="Evaluate encoder.")
+    parser.add_argument("--eval", type=int, default=1, help="Evaluate encoder.")
 
     args, cmdline_args = parser.parse_known_args()
 
-    model_name = args.model + "_encoder"
+    model_name = "encoder_" + args.model
     head = True if args.head == 1 else 0
     prefix = 'head' if head else 'tail'
 
