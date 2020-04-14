@@ -2,7 +2,7 @@
 #SBATCH --job-name=KBAT_ConvKB_fb
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=3
-#SBATCH --time=5:00:00
+#SBATCH --time=15:00:00
 #SBATCH --mem=60000M
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu_shared

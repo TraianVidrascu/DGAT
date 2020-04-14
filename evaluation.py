@@ -66,7 +66,7 @@ def main_encoder():
     parser.add_argument("--hidden_encoder", type=int, default=200, help="Number of neurons per hidden layer")
     parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
     parser.add_argument("--alpha", type=float, default=0.5, help="Inbound neighborhood importance.")
-    parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
+    parser.add_argument("--model", type=str, default=KBAT, help='Model name')
 
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
@@ -78,7 +78,7 @@ def main_encoder():
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
     parser.add_argument("--save", type=int, default=1, help="Save node embedding.")
-    parser.add_argument("--eval", type=int, default=1, help="Evaluate encoder.")
+    parser.add_argument("--eval", type=int, default=0, help="Evaluate encoder.")
 
     args, cmdline_args = parser.parse_known_args()
 
