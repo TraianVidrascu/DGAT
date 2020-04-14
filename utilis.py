@@ -45,7 +45,7 @@ def load_decoder_eval(model, rundir, model_name, dataset_name):
 def load_encoder_eval(model, rundir, model_name, dataset_name):
     path = osp.join(rundir, model_name.lower() + '_' + dataset_name.lower() + '.pt')
     if osp.exists(path):
-        model_dict = torch.load(path)
+        model_dict = torch.load(path, map_location='cuda:0')
         model.load_state_dict(model_dict['model_state_dict'])
     return model
 

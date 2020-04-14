@@ -13,8 +13,6 @@ from utilis import load_model, save_model, save_best, set_random_seed
 
 DECODER = 'decoder'
 
-DECODER = 'decoder'
-
 DECODER_FILE = 'decoder.pt'
 DECODER_CHECKPOINT = 'decoder_checkpoint.pt'
 
@@ -55,7 +53,7 @@ def train_decoder(args, decoder, data_loader):
     optim = torch.optim.Adam(decoder.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=25, gamma=0.5, last_epoch=-1)
 
-    pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, paths=False, dev='cpu')
+    pos_edge_idx, pos_edge_type = data_loader.graph2idx(graph, dev='cpu')
     m = pos_edge_idx.shape[1]
     n = h.shape[0]
 
@@ -75,9 +73,9 @@ def train_decoder(args, decoder, data_loader):
             pos_batch_type = pos_edge_type[batch]
 
             # generate invalid batch triplets
-            neg_batch_idx, neg_batch_type = data_loader.negative_samples(n, pos_batch_idx, pos_batch_type,
-                                                                         negative_ratio,
-                                                                         'cpu')
+            _, neg_batch_idx, neg_batch_type = data_loader.negative_samples(n, pos_batch_idx, pos_batch_type,
+                                                                            negative_ratio,
+                                                                            'cpu')
 
             # combine positive and negative batch
             no_pos = pos_batch_idx.shape[1]

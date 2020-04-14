@@ -140,7 +140,7 @@ def main_decoder():
         dataset = WN18RR()
     data_loader = DataLoader(dataset)
 
-    head = True if args.head == 1 else 0
+    head = True if args.head == 1 else False
     prefix = 'head' if head else 'tail'
 
     fold = args.fold

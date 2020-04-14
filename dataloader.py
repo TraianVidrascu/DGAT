@@ -150,8 +150,10 @@ class DataLoader:
 
         # negative samples, bernoulli sample tail or head
         sample = (torch.rand(size=(m,)) > 0.5).long()
-        neg_idx = pos_edge_idx.clone()
+        neg_idx = torch.zeros_like(pos_edge_idx)
         neg_idx[0, sample == 0] = head_corrupted[sample == 0]
+        neg_idx[0, sample != 0] = pos_edge_idx[0, sample != 0]
         neg_idx[1, sample == 1] = tail_corrupted[sample == 1]
+        neg_idx[1, sample != 1] = pos_edge_idx[1, sample != 1]
 
         return pos_edge_idx.to(dev), neg_idx.to(dev), edge_type.to(dev)
