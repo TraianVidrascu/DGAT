@@ -9,12 +9,13 @@ from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
 from metrics import get_model_metrics
 from model import ConvKB
-from utilis import load_model, save_model, save_best, set_random_seed
+from utilis import load_model, save_model, save_best, set_random_seed, load_embedding
 
 DECODER = 'decoder'
 
 DECODER_FILE = 'decoder.pt'
 DECODER_CHECKPOINT = 'decoder_checkpoint.pt'
+EMBEDDING_DIR = './eval_dir/embeddings'
 
 
 def get_decoder(args):
@@ -28,7 +29,7 @@ def get_decoder(args):
     return model
 
 
-def train_decoder(args, decoder, data_loader):
+def train_decoder(args, decoder, data_loader, h, g):
     wandb.watch(decoder, log="all")
 
     dataset_name = data_loader.get_name()
@@ -43,7 +44,6 @@ def train_decoder(args, decoder, data_loader):
     model = args.model
 
     _, _, graph = data_loader.load_train('cpu')
-    h, g = data_loader.load_embedding(model, 'cpu')
 
     decoder_file = DECODER_FILE + '_' + model.lower() + '_' + dataset_name.lower() + '.pt'
 
@@ -170,11 +170,11 @@ def main():
     # load model architecture
     decoder = get_decoder(args)
 
+    h, g = load_embedding(args.model, EMBEDDING_DIR, args.dataset)
     # train decoder model
-    train_decoder(args, decoder, data_loader)
+    train_decoder(args, decoder, data_loader, h, g)
     print('done training!')
 
-    h, g = data_loader.load_embedding(args.model)
     # Evaluate test and valid fold after training is done
     metrics = get_model_metrics(decoder, h, g, data_loader, 'test', DECODER, args.device)
     print('done eval test!')
