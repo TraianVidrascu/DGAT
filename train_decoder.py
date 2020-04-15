@@ -11,6 +11,9 @@ from metrics import get_model_metrics
 from model import ConvKB
 from utilis import load_model, save_model, save_best, set_random_seed, load_embedding
 
+KBAT = 'KBAT'
+DKBAT = 'DKBAT'
+
 DECODER = 'decoder'
 
 DECODER_FILE = 'decoder.pt'
@@ -144,7 +147,7 @@ def main():
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size for decoder.")
     parser.add_argument("--negative-ratio", type=int, default=40, help="Number of negative samples.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
-    parser.add_argument("--model", type=str, default='KBAT', help="Which model's embedding to use.")
+    parser.add_argument("--model", type=str, default=DKBAT, help="Which model's embedding to use.")
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
 
