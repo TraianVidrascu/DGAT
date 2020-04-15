@@ -42,6 +42,14 @@ def load_decoder_eval(model, rundir, model_name, dataset_name):
     return model
 
 
+def load_embedding(model_name, rundir, dataset_name):
+    path_h = osp.join(rundir, 'h_' + model_name.lower() + '_' + dataset_name.lower() + '.pt')
+    path_g = osp.join(rundir, 'g_' + model_name.lower() + '_' + dataset_name.lower() + '.pt')
+    h = torch.load(path_h)
+    g = torch.load(path_g)
+    return h, g
+
+
 def load_encoder_eval(model, rundir, model_name, dataset_name):
     path = osp.join(rundir, model_name.lower() + '_' + dataset_name.lower() + '.pt')
     if osp.exists(path):

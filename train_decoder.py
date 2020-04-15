@@ -111,7 +111,7 @@ def train_decoder(args, decoder, data_loader):
         save_best(decoder, loss_epoch, epoch + 1, decoder_file, asc=False)
 
         if (epoch + 1) % eval == 0:
-            metrics = get_model_metrics(decoder, h, g, data_loader, 'valid', DECODER, dev)
+            metrics = get_model_metrics(decoder, h, g, data_loader, 'test', DECODER, dev)
 
             metrics['train_' + dataset_name + '_Loss_decoder'] = loss_epoch
             wandb.log(metrics)

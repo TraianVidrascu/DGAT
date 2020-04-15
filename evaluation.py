@@ -7,7 +7,7 @@ from dataloader import DataLoader
 from metrics import get_model_metrics, get_model_metrics_head_or_tail
 from train_decoder import get_decoder
 from train_encoder import KBAT, DKBAT, get_encoder
-from utilis import load_decoder_eval, load_encoder_eval
+from utilis import load_decoder_eval, load_encoder_eval, load_embedding
 
 import os.path as osp
 
@@ -48,9 +48,10 @@ def save_embedding(data_loader, encoder, embedding_model, dev='cpu'):
 
 
 def evaluate_decoder(data_loader, fold, decoder, run_dir, model_name, head, dev='cpu'):
-    h, g = data_loader.load_embedding(model_name)
     dataset_name = data_loader.get_name()
-    load_decoder_eval(decoder, run_dir, model_name, dataset_name)
+    h, g = load_embedding(model_name, EMBEDDING_DIR, dataset_name)
+
+    decoder = load_decoder_eval(decoder, run_dir, model_name, dataset_name)
 
     metrics = get_model_metrics_head_or_tail(data_loader, h, g, fold, decoder, 'decoder', head, dev=dev)
     print(model_name + '_ConvKB ' + data_loader.get_name() + ' ' + fold + ' metrics:')
@@ -78,7 +79,7 @@ def main_encoder():
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
     parser.add_argument("--save", type=int, default=1, help="Save node embedding.")
-    parser.add_argument("--eval", type=int, default=0, help="Evaluate encoder.")
+    parser.add_argument("--eval", type=int, default=1, help="Evaluate encoder.")
 
     args, cmdline_args = parser.parse_known_args()
 
@@ -96,8 +97,6 @@ def main_encoder():
         dataset = WN18RR()
     data_loader = DataLoader(dataset)
 
-    wandb.init(project=model_name + '_' + dataset.name + '_' + fold + '_' + prefix + '_eval', config=args)
-
     # load model architecture
     x_size = dataset.size_x
     g_size = dataset.size_g
@@ -113,6 +112,7 @@ def main_encoder():
         save_embedding(data_loader, model, args.model, dev=args.device)
 
     if eval:
+        wandb.init(project=model_name + '_' + dataset.name + '_' + fold + '_' + prefix + '_eval', config=args)
         evaluate_encoder(data_loader, fold, model, args.model, head, dev=args.device)
 
 
@@ -123,10 +123,10 @@ def main_decoder():
     parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
+    parser.add_argument("--model", type=str, default=KBAT, help='Model name')
 
     # evaluation parameters
-    parser.add_argument("--dataset", type=str, default='WN18RR', help="Dataset used for evaluation.")
+    parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for evaluation.")
     parser.add_argument("--fold", type=str, default='test', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
@@ -146,10 +146,10 @@ def main_decoder():
     fold = args.fold
     model_name = args.model
 
-    wandb.init(project=args.model + '_' + dataset.name + '_' + fold + '_' + prefix + '_eval', config=args)
+    wandb.init(project=args.model + '_' + 'ConvKB_' + dataset.name + '_' + fold + '_' + prefix + '_eval', config=args)
 
     evaluate_decoder(data_loader, fold, decoder, DECODER_DIR, model_name, head, dev=args.device)
 
 
 if __name__ == '__main__':
-    main_encoder()
+    main_decoder()
