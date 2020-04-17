@@ -165,6 +165,6 @@ class DataLoader:
 
         return pos_edge_idx.to(dev), neg_idx.to(dev), edge_type.to(dev)
 
-    def load_invalid_sampling(self):
-        invalid_head_sampling, invalid_tail_sampling = self.dataset.load_invalid_sampling()
+    def load_invalid_sampling(self, fold='train'):
+        invalid_head_sampling, invalid_tail_sampling = self.dataset.load_invalid_sampling(fold)
         return invalid_head_sampling, invalid_tail_sampling

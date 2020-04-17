@@ -324,12 +324,12 @@ class Dataset:
         _, _, graph_valid = self.load_fold('valid', 'cpu')
         _, _, graph_test = self.load_fold('test', 'cpu')
 
-        edge_idx, edge_type = DataLoader.graph2idx(graph_train)
-        triplets_train = self._merge_type_and_ends(edge_idx, edge_type)
-        edge_idx, edge_type = DataLoader.graph2idx(graph_valid)
-        triplets_valid = self._merge_type_and_ends(edge_idx, edge_type)
-        edge_idx, edge_type = DataLoader.graph2idx(graph_test)
-        triplets_test = self._merge_type_and_ends(edge_idx, edge_type)
+        train_idx, train_type = DataLoader.graph2idx(graph_train)
+        triplets_train = self._merge_type_and_ends(train_idx, train_type)
+        valid_idx, valid_type = DataLoader.graph2idx(graph_valid)
+        triplets_valid = self._merge_type_and_ends(valid_idx, valid_type)
+        test_idx, test_type = DataLoader.graph2idx(graph_test)
+        triplets_test = self._merge_type_and_ends(test_idx, test_type)
 
         valid_triplets = torch.cat([triplets_train, triplets_valid, triplets_test], dim=1)
         return valid_triplets
@@ -347,13 +347,23 @@ class Dataset:
             print('Processed %.d' % i)
 
         _, _, train_graph = self.load_fold('train', 'cpu')
-        train_idx, train_type = DataLoader.graph2idx(train_graph)
+        _, _, graph_valid = self.load_fold('valid', 'cpu')
+        _, _, graph_test = self.load_fold('test', 'cpu')
 
+        train_idx, train_type = DataLoader.graph2idx(train_graph)
+        valid_idx, valid_type = DataLoader.graph2idx(graph_valid)
+        test_idx, test_type = DataLoader.graph2idx(graph_test)
+
+        self._save_invalid_sampling_fold(head_map, tail_map, train_idx, train_type, 'train')
+        self._save_invalid_sampling_fold(head_map, tail_map, valid_idx, valid_type, 'valid')
+        self._save_invalid_sampling_fold(head_map, tail_map, test_idx, test_type, 'test')
+
+    def _save_invalid_sampling_fold(self, head_map, tail_map, edge_idx, edge_type, fold):
         head_invalid_sampling = []
         tail_invalid_sampling = []
-        for i in range(train_idx.shape[1]):
-            row, col = train_idx[:, i].long()
-            rel = train_type[i].long()
+        for i in range(edge_idx.shape[1]):
+            row, col = edge_idx[:, i].long()
+            rel = edge_type[i].long()
             row, rel, col = row.item(), rel.item(), col.item()
 
             # head part
@@ -364,20 +374,18 @@ class Dataset:
             invalid_tails = tail_map[row][rel]
             tail_invalid_sampling.append(invalid_tails)
             print('Processed %.d' % i + ' biggest: %.d' % max(len(invalid_tails), len(invalid_heads)))
-
-        head_path = self.processed_dir + 'head_sampling.pk'
-        tail_path = self.processed_dir + 'tail_sampling.pk'
+        head_path = self.processed_dir + fold + '_head_sampling.pk'
+        tail_path = self.processed_dir + fold + '_tail_sampling.pk'
         with open(head_path, 'wb') as handler:
             head_invalid_sampling = np.array(head_invalid_sampling)
             pk.dump(head_invalid_sampling, handler, pk.HIGHEST_PROTOCOL)
-
         with open(tail_path, 'wb') as handler:
             tail_invalid_sampling = np.array(tail_invalid_sampling)
             pk.dump(tail_invalid_sampling, handler, pk.HIGHEST_PROTOCOL)
 
-    def load_invalid_sampling(self):
-        head_path = self.processed_dir + 'head_sampling.pk'
-        tail_path = self.processed_dir + 'tail_sampling.pk'
+    def load_invalid_sampling(self, fold='train'):
+        head_path = self.processed_dir + fold + '_head_sampling.pk'
+        tail_path = self.processed_dir + fold + '_tail_sampling.pk'
         with open(head_path, 'rb') as handler:
             head_invalid_sampling = pk.load(handler)
         with open(tail_path, 'rb') as handler:

@@ -59,40 +59,49 @@ def train_encoder(args, model, data_loader):
 
     # load data
     x, g, graph = data_loader.load_train('cpu')
+    n = x.shape[0]
+
     wandb.watch(model, log="all")
 
+    _, _, vaild_graph = data_loader.load_valid('cpu')
+    valid_idx, valid_type = data_loader.graph2idx(vaild_graph)
+    valid_head_invalid_sampling, valid_tail_invalid_sampling = data_loader.load_invalid_sampling('valid')
+    valid_pos_edge_epoch_idx, valid_neg_edge_idx, valid_pos_edge_epoch_type = data_loader.negative_samples(n, valid_idx,
+                                                                                                           valid_type,
+                                                                                                           negative_ratio,
+                                                                                                           valid_head_invalid_sampling,
+                                                                                                           valid_tail_invalid_sampling,
+                                                                                                           'cpu')
     first = 0
 
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, last_epoch=-1, gamma=0.5)
 
     train_idx, train_type = data_loader.graph2idx(graph, dev='cpu')
-    n = x.shape[0]
 
     head_invalid_sampling, tail_invalid_sampling = data_loader.load_invalid_sampling()
     edge_idx, edge_type = train_idx[:, :], train_type[:]
-
-    # # shuffling positive edges
-    s_shuffling = time.time()
-    perm = torch.randperm(edge_idx.shape[1])
-    edge_idx = edge_idx[:, perm]
-    edge_type = edge_type[perm]
-    head_invalid_sampling = head_invalid_sampling[perm]
-    tail_invalid_sampling = tail_invalid_sampling[perm]
-    t_shuffling = time.time()
-
-    # negative sampling and arranging data
-    s_sampling = time.time()
-    pos_edge_epoch_idx, neg_edge_idx, pos_edge_epoch_type = data_loader.negative_samples(n, edge_idx, edge_type,
-                                                                                         negative_ratio,
-                                                                                         head_invalid_sampling,
-                                                                                         tail_invalid_sampling,
-                                                                                         'cpu')
 
     for epoch in range(first, epochs):
         s_epoch = time.time()
         model.train()
 
+        # # shuffling positive edges
+        s_shuffling = time.time()
+        perm = torch.randperm(edge_idx.shape[1])
+        edge_idx = edge_idx[:, perm]
+        edge_type = edge_type[perm]
+        head_invalid_sampling = head_invalid_sampling[perm]
+        tail_invalid_sampling = tail_invalid_sampling[perm]
+        t_shuffling = time.time()
+
+        # negative sampling and arranging data
+        s_sampling = time.time()
+        pos_edge_epoch_idx, neg_edge_idx, pos_edge_epoch_type = data_loader.negative_samples(n, edge_idx, edge_type,
+                                                                                             negative_ratio,
+                                                                                             head_invalid_sampling,
+                                                                                             tail_invalid_sampling,
+                                                                                             'cpu')
         t_sampling = time.time()
 
         losses_epoch = []
@@ -146,6 +155,14 @@ def train_encoder(args, model, data_loader):
                       'Loss Batch: %.4f ' % (losses_epoch[-1]))
 
         loss_epoch = sum(losses_epoch) / len(losses_epoch)
+
+        # validation loss
+        model.eval()
+        h_valid, g_valid = model(x.to(dev), g.to(dev), valid_idx.to(dev), valid_type.to(dev))
+        valid_loss = model.loss(h_valid, g_valid, valid_pos_edge_epoch_idx.to(dev), valid_pos_edge_epoch_type.to(dev),
+                                valid_neg_edge_idx.to(dev), valid_pos_edge_epoch_type.to(dev)).item()
+        del h_valid, g_valid
+
         scheduler.step()
 
         t_epcoh = time.time()
@@ -153,7 +170,8 @@ def train_encoder(args, model, data_loader):
             print('Epoch time: %.4f ' % (t_epcoh - s_epoch) +
                   'Sampling time: %.4f ' % (t_sampling - s_sampling) +
                   'Shuffling time: %.4f ' % (t_shuffling - s_shuffling) +
-                  'Loss Epoch: %.4f ' % loss_epoch)
+                  'Loss Epoch: %.4f ' % loss_epoch +
+                  'Loss Valid: %.4f ' % valid_loss)
 
         save_best(model, loss_epoch, epoch + 1, encoder_file, asc=False)
         torch.cuda.empty_cache()
@@ -162,9 +180,11 @@ def train_encoder(args, model, data_loader):
             h_prime, g_prime = model(x.to(dev), g.to(dev), train_idx.to(dev), train_type.to(dev))
             metrics = get_model_metrics(data_loader, h_prime, g_prime, 'test', model, ENCODER, dev=args.device)
             metrics['train_' + dataset_name + '_Loss_encoder'] = loss_epoch
+            metrics['valid_' + dataset_name + '_Loss_encoder'] = valid_loss
             wandb.log(metrics)
         else:
-            wandb.log({'train_' + dataset_name + '_Loss_encoder': loss_epoch})
+            wandb.log({'train_' + dataset_name + '_Loss_encoder': loss_epoch,
+                       'valid_' + dataset_name + '_Loss_encoder': valid_loss})
 
         del h_prime, g_prime, loss
         torch.cuda.empty_cache()

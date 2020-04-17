@@ -24,13 +24,5 @@ def is_in(triplet):
 
 if __name__ == '__main__':
     dataset = FB15Dataset()
-    a, b = dataset.load_invalid_sampling()
-    samples = torch.randint(0, 15000, size=(272115,))
-
-    res = torch.tensor([sample in a[i] for i, sample in enumerate(samples.tolist())])
-    same = torch.sum(res)
-    while same > 0:
-        print(same)
-        samples[res] = torch.randint(0, 15000, size=samples[res].shape)
-        res = torch.tensor([sample in a[i] for i, sample in enumerate(samples.tolist())])
-        same = torch.sum(res)
+    valid_triples = dataset.get_valid_triplets()
+    dataset.save_invalid_sampling(valid_triples)
