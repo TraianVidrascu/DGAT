@@ -173,7 +173,7 @@ def train_encoder(args, model, data_loader):
                   'Loss Epoch: %.4f ' % loss_epoch +
                   'Loss Valid: %.4f ' % valid_loss)
 
-        save_best(model, loss_epoch, epoch + 1, encoder_file, asc=False)
+        save_best(model, valid_loss, epoch + 1, encoder_file, asc=False)
         torch.cuda.empty_cache()
         if (epoch + 1) % eval == 0:
             model.eval()
