@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import torch
 import pickle as pk
 import os.path as osp
@@ -5,7 +7,8 @@ import networkx as nk
 import wandb
 import pandas as pd
 import numpy as np
-import concurrent.futures
+import functools
+
 from dataloader import DataLoader
 
 BEGINLIST = 'BEGIN'
@@ -148,6 +151,8 @@ class Dataset:
         self.save_paths(2)
         self.save_triplets_raw()
         self.filter_evaluation_folds()
+        valid_triples = self.get_valid_triplets()
+        self.save_invalid_sampling(valid_triples)
 
     @staticmethod
     def find(tensor, values):
@@ -304,6 +309,80 @@ class Dataset:
 
         df = pd.DataFrame(columns=columns, data=self.paths, dtype=int)
         df.to_pickle(self.processed_dir + 'paths_' + str(depth) + '.pkl')
+
+    @staticmethod
+    def dd():
+        return defaultdict(set)
+
+    def _merge_type_and_ends(self, edge_idx, edge_type):
+        row, col = edge_idx
+        triplet = torch.stack([row, edge_type, col])
+        return triplet
+
+    def get_valid_triplets(self):
+        _, _, graph_train = self.load_fold('train', 'cpu')
+        _, _, graph_valid = self.load_fold('valid', 'cpu')
+        _, _, graph_test = self.load_fold('test', 'cpu')
+
+        edge_idx, edge_type = DataLoader.graph2idx(graph_train)
+        triplets_train = self._merge_type_and_ends(edge_idx, edge_type)
+        edge_idx, edge_type = DataLoader.graph2idx(graph_valid)
+        triplets_valid = self._merge_type_and_ends(edge_idx, edge_type)
+        edge_idx, edge_type = DataLoader.graph2idx(graph_test)
+        triplets_test = self._merge_type_and_ends(edge_idx, edge_type)
+
+        valid_triplets = torch.cat([triplets_train, triplets_valid, triplets_test], dim=1)
+        return valid_triplets
+
+    def save_invalid_sampling(self, valid_triplets):
+        head_map = defaultdict(self.dd)
+        tail_map = defaultdict(self.dd)
+        for i, triplet in enumerate(valid_triplets.t()):
+            row, rel, col = triplet.long()
+            row, rel, col = row.item(), rel.item(), col.item()
+            # head part
+            head_map[col][rel].add(row)
+            # tail part
+            tail_map[row][rel].add(col)
+            print('Processed %.d' % i)
+
+        _, _, train_graph = self.load_fold('train', 'cpu')
+        train_idx, train_type = DataLoader.graph2idx(train_graph)
+
+        head_invalid_sampling = []
+        tail_invalid_sampling = []
+        for i in range(train_idx.shape[1]):
+            row, col = train_idx[:, i].long()
+            rel = train_type[i].long()
+            row, rel, col = row.item(), rel.item(), col.item()
+
+            # head part
+            invalid_heads = head_map[col][rel]
+            head_invalid_sampling.append(invalid_heads)
+
+            # tail part
+            invalid_tails = tail_map[row][rel]
+            tail_invalid_sampling.append(invalid_tails)
+            print('Processed %.d' % i + ' biggest: %.d' % max(len(invalid_tails), len(invalid_heads)))
+
+        head_path = self.processed_dir + 'head_sampling.pk'
+        tail_path = self.processed_dir + 'tail_sampling.pk'
+        with open(head_path, 'wb') as handler:
+            head_invalid_sampling = np.array(head_invalid_sampling)
+            pk.dump(head_invalid_sampling, handler, pk.HIGHEST_PROTOCOL)
+
+        with open(tail_path, 'wb') as handler:
+            tail_invalid_sampling = np.array(tail_invalid_sampling)
+            pk.dump(tail_invalid_sampling, handler, pk.HIGHEST_PROTOCOL)
+
+    def load_invalid_sampling(self):
+        head_path = self.processed_dir + 'head_sampling.pk'
+        tail_path = self.processed_dir + 'tail_sampling.pk'
+        with open(head_path, 'rb') as handler:
+            head_invalid_sampling = pk.load(handler)
+        with open(tail_path, 'rb') as handler:
+            tail_invalid_sampling = pk.load(handler)
+        return head_invalid_sampling, tail_invalid_sampling
 
 
 class FB15Dataset(Dataset):

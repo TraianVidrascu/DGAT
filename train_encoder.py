@@ -69,25 +69,29 @@ def train_encoder(args, model, data_loader):
     train_idx, train_type = data_loader.graph2idx(graph, dev='cpu')
     n = x.shape[0]
 
+    head_invalid_sampling, tail_invalid_sampling = data_loader.load_invalid_sampling()
     edge_idx, edge_type = train_idx[:, :], train_type[:]
+
+    # # shuffling positive edges
+    s_shuffling = time.time()
+    perm = torch.randperm(edge_idx.shape[1])
+    edge_idx = edge_idx[:, perm]
+    edge_type = edge_type[perm]
+    head_invalid_sampling = head_invalid_sampling[perm]
+    tail_invalid_sampling = tail_invalid_sampling[perm]
+    t_shuffling = time.time()
+
+    # negative sampling and arranging data
+    s_sampling = time.time()
+    pos_edge_epoch_idx, neg_edge_idx, pos_edge_epoch_type = data_loader.negative_samples(n, edge_idx, edge_type,
+                                                                                         negative_ratio,
+                                                                                         head_invalid_sampling,
+                                                                                         tail_invalid_sampling,
+                                                                                         'cpu')
 
     for epoch in range(first, epochs):
         s_epoch = time.time()
         model.train()
-
-        # negative sampling and arranging data
-        s_sampling = time.time()
-        pos_edge_epoch_idx, neg_edge_idx, pos_edge_epoch_type = data_loader.negative_samples(n, edge_idx, edge_type,
-                                                                                             negative_ratio,
-                                                                                             'cpu')
-
-        # # shuffling positive edges
-        s_shuffling = time.time()
-        perm = torch.randperm(pos_edge_epoch_idx.shape[1])
-        pos_edge_epoch_idx = pos_edge_epoch_idx[:, perm]
-        neg_edge_idx = neg_edge_idx[:, perm]
-        pos_edge_epoch_type = pos_edge_epoch_type[perm]
-        t_shuffling = time.time()
 
         t_sampling = time.time()
 
@@ -197,17 +201,17 @@ def main():
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval", type=int, default=3000, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
+    parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
-    parser.add_argument("--step_size", type=int, default=200, help="Step size of scheduler.")
+    parser.add_argument("--step_size", type=int, default=500, help="Step size of scheduler.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-3, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
     parser.add_argument("--batch", type=int, default=272115, help="Batch size.")
-    parser.add_argument("--negative_ratio", type=int, default=10, help="Number of negative edges per positive one.")
+    parser.add_argument("--negative_ratio", type=int, default=4, help="Number of negative edges per positive one.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
@@ -218,7 +222,7 @@ def main():
     parser.add_argument("--hidden_encoder", type=int, default=200, help="Number of neurons per hidden layer")
     parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
     parser.add_argument("--alpha", type=float, default=0.5, help="Inbound neighborhood importance.")
-    parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
+    parser.add_argument("--model", type=str, default=KBAT, help='Model name')
 
     args, cmdline_args = parser.parse_known_args()
 

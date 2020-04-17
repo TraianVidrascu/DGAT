@@ -132,28 +132,39 @@ class DataLoader:
         return None, None, position
 
     @staticmethod
-    def negative_samples(n, edge_idx, edge_type, negative_ratio, dev='cpu'):
-        # put negative sample of same edge together
+    def _negative_sample_and_check(invalid_sampling, n, dev='cpu'):
+        m = len(invalid_sampling)
+        corrupted = torch.randint(size=(m,), high=n).to(dev)
+        same = torch.tensor([sample in invalid_sampling[i] for i, sample in enumerate(corrupted.tolist())])
+        no_same = torch.sum(same)
+        while no_same > 0:
+            corrupted[same] = torch.randint(0, high=n, size=corrupted[same].shape)
+            same = torch.tensor([sample in invalid_sampling[i] for i, sample in enumerate(corrupted.tolist())])
+            no_same = torch.sum(same)
+        return corrupted
+
+    @staticmethod
+    def negative_samples(n, edge_idx, edge_type, negative_ratio, head_invalid_sampling, tail_invalid_sampling,
+                         dev='cpu'):
+        row, col = edge_idx
+        neg_idx = []
+        for i in range(negative_ratio // 2):
+            head_corrupted = DataLoader._negative_sample_and_check(head_invalid_sampling, n)
+            tail_corrupted = DataLoader._negative_sample_and_check(tail_invalid_sampling, n)
+
+            neg_head_idx = torch.stack([head_corrupted, col])
+            neg_tail_idx = torch.stack([row, tail_corrupted])
+            neg_idx.append(neg_head_idx)
+            neg_idx.append(neg_tail_idx)
+
+        neg_idx = torch.cat(neg_idx, dim=1)
+
+        # # put negative sample of same edge together
         pos_edge_idx = edge_idx.repeat((negative_ratio, 1)).t().flatten().view(-1, 2).t()
         edge_type = edge_type[None, :].repeat((negative_ratio, 1)).t().flatten()
 
-        row, col = pos_edge_idx
-        m = row.shape[0]
-
-        # corrupt head triplet
-        head_corrupted = torch.randint(size=(m,), high=n).to(dev)
-        head_corrupted[row == head_corrupted] = (head_corrupted[row == head_corrupted] + 1) % n
-
-        # corrupt tail triplet
-        tail_corrupted = torch.randint(size=(m,), high=n).to(dev)
-        tail_corrupted[col == tail_corrupted] = (tail_corrupted[col == tail_corrupted] + 1) % n
-
-        # negative samples, bernoulli sample tail or head
-        sample = (torch.rand(size=(m,)) > 0.5).long()
-        neg_idx = torch.zeros_like(pos_edge_idx)
-        neg_idx[0, sample == 0] = head_corrupted[sample == 0]
-        neg_idx[0, sample != 0] = pos_edge_idx[0, sample != 0]
-        neg_idx[1, sample == 1] = tail_corrupted[sample == 1]
-        neg_idx[1, sample != 1] = pos_edge_idx[1, sample != 1]
-
         return pos_edge_idx.to(dev), neg_idx.to(dev), edge_type.to(dev)
+
+    def load_invalid_sampling(self):
+        invalid_head_sampling, invalid_tail_sampling = self.dataset.load_invalid_sampling()
+        return invalid_head_sampling, invalid_tail_sampling
