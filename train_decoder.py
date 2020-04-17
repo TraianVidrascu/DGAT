@@ -110,6 +110,7 @@ def train_decoder(args, decoder, data_loader, h, g):
             torch.cuda.empty_cache()
         scheduler.step()
 
+        # save_model(decoder, loss_epoch, epoch + 1, DECODER_CHECKPOINT)
         save_best(decoder, loss_epoch, epoch + 1, decoder_file, asc=False)
 
         if (epoch + 1) % eval == 0:
@@ -146,7 +147,7 @@ def main():
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size for decoder.")
     parser.add_argument("--negative-ratio", type=int, default=40, help="Number of negative samples.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
-    parser.add_argument("--model", type=str, default=KBAT, help="Which model's embedding to use.")
+    parser.add_argument("--model", type=str, default=DKBAT, help="Which model's embedding to use.")
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
 
