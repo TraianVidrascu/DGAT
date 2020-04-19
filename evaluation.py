@@ -7,7 +7,7 @@ from dataloader import DataLoader
 from metrics import get_model_metrics, get_model_metrics_head_or_tail
 from train_decoder import get_decoder
 from train_encoder import KBAT, DKBAT, get_encoder
-from utilis import load_decoder_eval, load_encoder_eval, load_embedding
+from utilis import load_decoder_eval, load_encoder_eval, load_embedding, save_eval_model
 
 import os.path as osp
 
@@ -45,6 +45,7 @@ def save_embedding(data_loader, encoder, embedding_model, dev='cpu'):
 
     torch.save(h, h_path)
     torch.save(g, g_path)
+
 
 
 def evaluate_decoder(data_loader, fold, decoder, run_dir, model_name, head, dev='cpu'):
@@ -90,7 +91,6 @@ def main_encoder():
     save = True if args.save == 1 else 0
     eval = True if args.eval == 1 else 0
 
-    fold = args.fold
     if args.dataset == 'FB15k-237':
         dataset = FB15Dataset()
     else:
@@ -113,6 +113,7 @@ def main_encoder():
 
     if eval:
         wandb.init(project=model_name + '_' + dataset.name + '_' + fold + '_' + prefix + '_eval', config=args)
+        save_eval_model(model, model_name, dataset_name)
         evaluate_encoder(data_loader, fold, model, args.model, head, dev=args.device)
 
 
@@ -152,4 +153,4 @@ def main_decoder():
 
 
 if __name__ == '__main__':
-    main_decoder()
+    main_encoder()

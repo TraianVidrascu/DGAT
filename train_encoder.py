@@ -158,7 +158,7 @@ def train_encoder(args, model, data_loader):
 
         # validation loss
         model.eval()
-        h_valid, g_valid = model(x.to(dev), g.to(dev), valid_idx.to(dev), valid_type.to(dev))
+        h_valid, g_valid = model(x.to(dev), g.to(dev), train_idx.to(dev), train_type.to(dev))
         valid_loss = model.loss(h_valid, g_valid, valid_pos_edge_epoch_idx.to(dev), valid_pos_edge_epoch_type.to(dev),
                                 valid_neg_edge_idx.to(dev), valid_pos_edge_epoch_type.to(dev)).item()
         del h_valid, g_valid
@@ -220,18 +220,18 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=3000, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
+    parser.add_argument("--eval", type=int, default=500, help="After how many epochs to evaluate.")
+    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=1500, help="Number of training epochs for encoder.")
+    parser.add_argument("--epochs", type=int, default=500, help="Number of training epochs for encoder.")
     parser.add_argument("--step_size", type=int, default=500, help="Step size of scheduler.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-3, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
     parser.add_argument("--dataset", type=str, default='FB15k-237', help="Dataset used for training.")
     parser.add_argument("--batch", type=int, default=272115, help="Batch size.")
-    parser.add_argument("--negative_ratio", type=int, default=4, help="Number of negative edges per positive one.")
+    parser.add_argument("--negative_ratio", type=int, default=2, help="Number of negative edges per positive one.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")

@@ -9,6 +9,12 @@ def save_model(model, metric, epoch, file):
     wandb.save(path)
 
 
+def save_eval_model(model, model_name, dataset_name):
+    path = osp.join(wandb.run.dir, model_name.lower() + '_' + dataset_name.lower() + '.pt')
+    torch.save({'model_state_dict': model.state_dict()}, path)
+    wandb.save(path)
+
+
 def save_best(model, metric, epoch, file, asc=True):
     path = osp.join(wandb.run.dir, file)
     metric_old = None
