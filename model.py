@@ -73,12 +73,7 @@ class RelationalAttentionLayer(nn.Module):
         alpha = self.dropout(alpha)
         return alpha
 
-    def _compute_edges(self, edge_idx, edge_type, h, g):
-        torch.cuda.empty_cache()
-
-        row, col = edge_idx
-        # concatenate the 3 representations
-        h_ijk = torch.cat([h[row], h[col], g[edge_type]], dim=1)
+    def _compute_edges(self, h_ijk):
         # obtain edge representation
         c_ijk = self.fc1(h_ijk).view(-1, self.heads, self.out_size)
 
@@ -94,21 +89,18 @@ class RelationalAttentionLayer(nn.Module):
             self.self_edges = torch.zeros((n, self.heads, self.out_size))
             self.self_edge_mask = torch.tensor([i for i in range(n)]).long()
 
-    def forward(self, h, g, edge_idx, edge_type):
+    def forward(self, h_ijk, ends, n):
         # self edges
-        n = h.shape[0]
         self._self_edges_mask(n)
-        rows = edge_idx[0, :]
-        cols = edge_idx[1, :]
 
         # compute edge embeddings
-        c_ijk = self._compute_edges(edge_idx, edge_type, h, g)
+        c_ijk = self._compute_edges(h_ijk)
 
         # compute edge attention
-        alpha = self._attention(c_ijk, cols)
+        alpha = self._attention(c_ijk, ends)
 
         # aggregate node representation
-        h = self._aggregate(cols, alpha, c_ijk)
+        h = self._aggregate(ends, alpha, c_ijk)
         return h
 
 
@@ -237,17 +229,16 @@ class DKBATNet(KB):
         self.to(device)
 
     def forward(self, x, g, edge_idx, edge_type):
-        x, g, edge_idx, edge_type = x, g, edge_idx, edge_type
-        x = F.normalize(x, p=2, dim=1).detach()
         torch.cuda.empty_cache()
 
         row, col = edge_idx
-        outbound_edge_idx = torch.stack([col, row])
+        rel = edge_type
+        h_ijk = torch.cat([x[row], x[col], g[rel]], dim=1)
+        n = x.shape[0]
 
-        h_inbound = self.inbound_input_layer(x, g, edge_idx, edge_type)
-        h_outbound = self.outbound_input_layer(x, g, outbound_edge_idx, edge_type)
+        h_inbound = self.inbound_input_layer(h_ijk, col, n)
+        h_outbound = self.outbound_input_layer(h_ijk, row, n)
 
-        h_inbound, h_outbound = h_inbound, h_outbound
         alpha = self.alpha_input(h_inbound, h_outbound)
 
         h = alpha * h_inbound + (1 - alpha) * h_outbound
@@ -255,13 +246,10 @@ class DKBATNet(KB):
         h = F.normalize(h, p=2, dim=2)
         h = self._concat(h)
 
-        torch.cuda.empty_cache()
+        h_ijk = torch.cat([h[row], h[col], g[rel]], dim=1)
 
-        h_inbound = self.inbound_output_layer(h, g, edge_idx,
-                                              edge_type)
-        h_outbound = self.outbound_output_layer(h, g, outbound_edge_idx,
-                                                edge_type)
-        h_inbound, h_outbound = h_inbound, h_outbound
+        h_inbound = self.inbound_output_layer(h_ijk, col, n)
+        h_outbound = self.outbound_output_layer(h_ijk, row, n)
 
         alpha = self.alpha_output(h_inbound, h_outbound)
         h = alpha * h_inbound + (1 - alpha) * h_outbound
@@ -273,6 +261,7 @@ class DKBATNet(KB):
 
         h_prime = self._merge_heads(h_prime)
         g_prime = self.relation_layer(g)
+        g_prime = F.normalize(g_prime, p=2, dim=1)
 
         return h_prime, g_prime
 
@@ -300,24 +289,36 @@ class KBNet(KB):
         self.actv = nn.LeakyReLU(negative_slope)
 
     def forward(self, x, g, edge_idx, edge_type):
-        x = F.normalize(x, p=2, dim=1).detach()
-
         torch.cuda.empty_cache()
 
-        h = self.input_layer(x, g, edge_idx, edge_type)
+        row, col = edge_idx
+        rel = edge_type
+        n = x.shape[0]
+        # edge representation
+        h_ijk = torch.cat([x[row], x[col], g[rel]], dim=1)
+
+        # compute embedding
+        h = self.input_layer(h_ijk, col, n)
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
         h = self._concat(h)
 
-        h = self.output_layer(h, g, edge_idx, edge_type)
+        # edge representation
+        h_ijk = torch.cat([h[row], h[col], g[rel]], dim=1)
+
+        # compute last layer embedding
+        h = self.output_layer(h_ijk, col, n)
         h = self.actv(h)
         h = F.normalize(h, p=2, dim=2)
 
+        # add initial embeddings to last layer
         h_prime = self.entity_layer(x, h)
         g_prime = self.relation_layer(g)
 
+        # normalize last layer
         h_prime = F.normalize(h_prime, p=2, dim=2)
         h_prime = self._merge_heads(h_prime)
+        g_prime = F.normalize(g_prime, p=2, dim=1)
 
         return h_prime, g_prime
 

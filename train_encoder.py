@@ -3,6 +3,8 @@ import time
 
 import torch
 import torch.optim as optim
+import torch.nn.functional as F
+
 import wandb
 
 from data.dataset import FB15Dataset, WN18RR
@@ -63,6 +65,9 @@ def train_encoder(args, model, data_loader):
     # load data
     x, g, graph = data_loader.load_train('cpu')
     n = x.shape[0]
+    # normalize input
+    x = F.normalize(x, p=2, dim=1).detach()
+    g = F.normalize(g, p=2, dim=1).detach()
 
     # load graph base structure
     edge_idx, edge_type = data_loader.graph2idx(graph, dev='cpu')
@@ -120,6 +125,7 @@ def train_encoder(args, model, data_loader):
                                                                                     batch_tail_invalid_sampling,
                                                                                     'cpu')
             t_sampling = time.time()
+
 
             # forward pass the model; getting the node embeddings out of the structural information
             s_forward = time.time()
@@ -225,7 +231,7 @@ def main():
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=1000, help="Number of training epochs for encoder.")
-    parser.add_argument("--step_size", type=int, default=250, help="Step size of scheduler.")
+    parser.add_argument("--step_size", type=int, default=500, help="Step size of scheduler.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-3, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
@@ -242,7 +248,7 @@ def main():
     parser.add_argument("--hidden_encoder", type=int, default=200, help="Number of neurons per hidden layer")
     parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
     parser.add_argument("--alpha", type=float, default=0.5, help="Inbound neighborhood importance.")
-    parser.add_argument("--model", type=str, default=KBAT, help='Model name')
+    parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
 
     args, cmdline_args = parser.parse_known_args()
 
