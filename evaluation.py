@@ -47,7 +47,6 @@ def save_embedding(data_loader, encoder, embedding_model, dev='cpu'):
     torch.save(g, g_path)
 
 
-
 def evaluate_decoder(data_loader, fold, decoder, run_dir, model_name, head, dev='cpu'):
     dataset_name = data_loader.get_name()
     h, g = load_embedding(model_name, EMBEDDING_DIR, dataset_name)
@@ -79,17 +78,17 @@ def main_encoder():
     parser.add_argument("--fold", type=str, default='test', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
-    parser.add_argument("--save", type=int, default=1, help="Save node embedding.")
+    parser.add_argument("--save", type=int, default=0, help="Save node embedding.")
     parser.add_argument("--eval", type=int, default=1, help="Evaluate encoder.")
 
     args, cmdline_args = parser.parse_known_args()
 
     model_name = "encoder_" + args.model
-    head = True if args.head == 1 else 0
+    head = True if args.head == 1 else False
     prefix = 'head' if head else 'tail'
 
-    save = True if args.save == 1 else 0
-    eval = True if args.eval == 1 else 0
+    save = True if args.save == 1 else False
+    eval = True if args.eval == 1 else False
 
     if args.dataset == 'FB15k-237':
         dataset = FB15Dataset()
@@ -106,7 +105,6 @@ def main_encoder():
     model = load_encoder_eval(model, ENCODER_DIR, model_name, dataset_name)
 
     fold = args.fold
-    head = args.head
 
     if save:
         save_embedding(data_loader, model, args.model, dev=args.device)

@@ -179,12 +179,12 @@ def train_encoder(args, model, data_loader):
                   'Loss Epoch: %.4f ' % loss_epoch +
                   'Loss Valid: %.4f ' % valid_loss)
 
-        save_best(model, valid_loss, epoch + 1, encoder_file, asc=False)
+        save_best(model, loss_epoch, epoch + 1, encoder_file, asc=False)
         torch.cuda.empty_cache()
         if (epoch + 1) % eval == 0:
             model.eval()
             h_prime, g_prime = model(x.to(dev), g.to(dev), train_idx.to(dev), train_type.to(dev))
-            metrics = get_model_metrics(data_loader, h_prime, g_prime, 'test', model, ENCODER, dev=args.device)
+            metrics = get_model_metrics(data_loader, h_prime, g_prime, 'valid', model, ENCODER, dev=args.device)
             metrics['train_' + dataset_name + '_Loss_encoder'] = loss_epoch
             metrics['valid_' + dataset_name + '_Loss_encoder'] = valid_loss
             wandb.log(metrics)
@@ -230,7 +230,7 @@ def main():
     parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=1000, help="Number of training epochs for encoder.")
+    parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
     parser.add_argument("--step_size", type=int, default=500, help="Step size of scheduler.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-3, help="L2 normalization weight decay encoder.")
@@ -245,10 +245,10 @@ def main():
     # encoder parameters
     parser.add_argument("--negative_slope", type=float, default=0.2, help="Negative slope for Leaky Relu")
     parser.add_argument("--heads", type=int, default=2, help="Number of heads per layer")
-    parser.add_argument("--hidden_encoder", type=int, default=200, help="Number of neurons per hidden layer")
+    parser.add_argument("--hidden_encoder", type=int, default=200,  help="Number of neurons per hidden layer")
     parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
     parser.add_argument("--alpha", type=float, default=0.5, help="Inbound neighborhood importance.")
-    parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
+    parser.add_argument("--model", type=str, default=KBAT, help='Model name')
 
     args, cmdline_args = parser.parse_known_args()
 
