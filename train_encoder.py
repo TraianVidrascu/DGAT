@@ -11,7 +11,10 @@ from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
 from metrics import get_model_metrics
 from model import KBNet, DKBATNet
-from utilis import save_best, load_model, set_random_seed
+from utilis import save_best_encoder, load_model, set_random_seed, save_model
+
+FB15K = 'FB15K-237'
+WN18 = 'WN18RR'
 
 ENCODER = 'encoder'
 DKBAT = 'DKBAT'
@@ -44,6 +47,13 @@ def get_encoder(args, x_size, g_size):
 
 
 def train_encoder(args, model, data_loader):
+    model_name = args.model + "_encoder"
+    # set up weights and biases
+    if args.debug == 1:
+        model_name += '_debug'
+
+    run = wandb.init(project=model_name, config=args)
+
     wandb.watch(model, log="all")
 
     # system parameters
@@ -97,9 +107,9 @@ def train_encoder(args, model, data_loader):
         model.train()
 
         # shuffling epoch training data
-        perm = torch.randperm(edge_idx.shape[1])
-        edge_idx = edge_idx[:, perm]
-        edge_type = edge_type[perm]
+        perm = torch.randperm(train_idx.shape[1])
+        train_idx = train_idx[:, perm]
+        train_type = train_type[perm]
         train_head_invalid_sampling = train_head_invalid_sampling[perm]
         train_tail_invalid_sampling = train_tail_invalid_sampling[perm]
 
@@ -165,10 +175,9 @@ def train_encoder(args, model, data_loader):
 
         # compute validation loss
         model.eval()
-        h_valid, g_valid = model(x.to(dev), g.to(dev), train_idx.to(dev), train_type.to(dev))
-        valid_loss = model.loss(h_valid, g_valid, valid_pos_edge_epoch_idx.to(dev), valid_pos_edge_epoch_type.to(dev),
+        h_prime, g_prime = model(x.to(dev), g.to(dev), train_idx.to(dev), train_type.to(dev))
+        valid_loss = model.loss(h_prime, g_prime, valid_pos_edge_epoch_idx.to(dev), valid_pos_edge_epoch_type.to(dev),
                                 valid_neg_edge_idx.to(dev), valid_pos_edge_epoch_type.to(dev)).item()
-        del h_valid, g_valid
 
         scheduler.step()
 
@@ -178,11 +187,12 @@ def train_encoder(args, model, data_loader):
                   'Loss Epoch: %.4f ' % loss_epoch +
                   'Loss Valid: %.4f ' % valid_loss)
 
-        save_best(model, loss_epoch, epoch + 1, encoder_file, asc=False)
+        save_best_encoder(model, args.model, h_prime, g_prime, loss_epoch, epoch + 1, encoder_file, asc=False)
         torch.cuda.empty_cache()
         if (epoch + 1) % eval == 0:
-            model.eval()
-            h_prime, g_prime = model(x.to(dev), g.to(dev), train_idx.to(dev), train_type.to(dev))
+            encoder_epoch_file = ENCODER + '_' + args.model.lower() + '_' + dataset_name.lower() + '_' + str(
+                epoch) + '.pt'
+            save_model(model, loss_epoch, epoch + 1, encoder_epoch_file)
             metrics = get_model_metrics(data_loader, h_prime, g_prime, 'valid', model, ENCODER, dev=args.device)
             metrics['train_' + dataset_name + '_Loss_encoder'] = loss_epoch
             metrics['valid_' + dataset_name + '_Loss_encoder'] = valid_loss
@@ -194,7 +204,7 @@ def train_encoder(args, model, data_loader):
         del h_prime, g_prime, loss
         torch.cuda.empty_cache()
 
-    del x, g, graph, model
+    del x, g, graph, model, valid_loss
     torch.cuda.empty_cache()
 
 
@@ -225,16 +235,16 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=1000, help="After how many epochs to evaluate.")
+    parser.add_argument("--eval", type=int, default=1, help="After how many epochs to evaluate.")
     parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=1000, help="Number of training epochs for encoder.")
-    parser.add_argument("--step_size", type=int, default=250, help="Step size of scheduler.")
-    parser.add_argument("--lr", type=float, default=1e-2, help="Learning rate.")
+    parser.add_argument("--epochs", type=int, default=1, help="Number of training epochs for encoder.")
+    parser.add_argument("--step_size", type=int, default=1, help="Step size of scheduler.")
+    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-3, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
-    parser.add_argument("--dataset", type=str, default='WN18RR', help="Dataset used for training.")
+    parser.add_argument("--dataset", type=str, default=FB15K, help="Dataset used for training.")
     parser.add_argument("--batch", type=int, default=272115, help="Batch size.")
     parser.add_argument("--negative_ratio", type=int, default=2, help="Number of negative edges per positive one.")
 
@@ -251,16 +261,12 @@ def main():
 
     args, cmdline_args = parser.parse_known_args()
 
-    model_name = args.model + "_encoder"
-    # set up weights and biases
-    if args.debug == 1:
-        model_name += '_debug'
-    wandb.init(project=model_name, config=args)
-
-    if args.dataset == 'FB15k-237':
+    if args.dataset == FB15K:
         dataset = FB15Dataset()
-    else:
+    elif args.dataset == WN18:
         dataset = WN18RR()
+    else:
+        raise Exception('Database not found!')
     data_loader = DataLoader(dataset)
 
     # load model architecture
@@ -270,8 +276,6 @@ def main():
 
     # train model and save embeddings
     train_encoder(args, model, data_loader)
-    h, g = embed_nodes(args, model, dataset)
-    dataset.save_embedding(h, g, args.model)
 
 
 if __name__ == "__main__":

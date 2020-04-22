@@ -9,7 +9,7 @@ from data.dataset import FB15Dataset, WN18RR
 from dataloader import DataLoader
 from metrics import get_model_metrics
 from model import ConvKB
-from utilis import load_model, save_model, save_best, set_random_seed, load_embedding, save_embeddings
+from utilis import load_model, save_model, save_best_decoder, set_random_seed, load_embedding, save_embeddings
 
 KBAT = 'KBAT'
 DKBAT = 'DKBAT'
@@ -123,7 +123,7 @@ def train_decoder(args, decoder, data_loader, h, g):
         scheduler.step()
 
         loss_epoch = sum(losses) / len(losses)
-        save_best(decoder, loss_epoch, epoch + 1, decoder_file, asc=False)
+        save_best_decoder(decoder, loss_epoch, epoch + 1, decoder_file, asc=False)
 
         if (epoch + 1) % eval == 0:
             metrics = get_model_metrics(decoder, h, g, data_loader, 'test', DECODER, dev)

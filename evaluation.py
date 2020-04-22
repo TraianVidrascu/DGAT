@@ -9,7 +9,11 @@ from train_decoder import get_decoder
 from train_encoder import KBAT, DKBAT, get_encoder
 from utilis import load_decoder_eval, load_encoder_eval, load_embedding, save_eval_model
 
+import torch.nn.functional as F
 import os.path as osp
+
+WN18 = 'WN18RR'
+FB15 = 'FB15K-237'
 
 ENCODER_DIR = './eval_dir/encoder'
 DECODER_DIR = './eval_dir/decoder'
@@ -18,6 +22,11 @@ EMBEDDING_DIR = './eval_dir/embeddings'
 
 def evaluate_encoder(data_loader, fold, encoder, embedding_model, head, dev='cpu'):
     x, g, graph = data_loader.load_train(dev)
+
+    # normalize input
+    x = F.normalize(x, p=2, dim=1).detach()
+    g = F.normalize(g, p=2, dim=1).detach()
+
     edge_idx, edge_type = DataLoader.graph2idx(graph, dev=dev)
     with torch.no_grad():
         encoder.eval()
@@ -31,6 +40,11 @@ def evaluate_encoder(data_loader, fold, encoder, embedding_model, head, dev='cpu
 
 def save_embedding(data_loader, encoder, embedding_model, dev='cpu'):
     x, g, graph = data_loader.load_train(dev)
+
+    # normalize input
+    x = F.normalize(x, p=2, dim=1).detach()
+    g = F.normalize(g, p=2, dim=1).detach()
+
     edge_idx, edge_type = DataLoader.graph2idx(graph, dev=dev)
     with torch.no_grad():
         encoder.eval()
@@ -74,7 +88,7 @@ def main_encoder():
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
 
     # evaluation parameters
-    parser.add_argument("--dataset", type=str, default='WN18RR', help="Dataset used for evaluation.")
+    parser.add_argument("--dataset", type=str, default=FB15, help="Dataset used for evaluation.")
     parser.add_argument("--fold", type=str, default='valid', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
@@ -90,10 +104,12 @@ def main_encoder():
     save = True if args.save == 1 else False
     eval = True if args.eval == 1 else False
 
-    if args.dataset == 'FB15k-237':
+    if args.dataset == FB15:
         dataset = FB15Dataset()
-    else:
+    elif args.dataset == WN18:
         dataset = WN18RR()
+    else:
+        raise Exception('No such dataset!')
     data_loader = DataLoader(dataset)
 
     # load model architecture
@@ -125,7 +141,7 @@ def main_decoder():
     parser.add_argument("--model", type=str, default=KBAT, help='Model name')
 
     # evaluation parameters
-    parser.add_argument("--dataset", type=str, default='WN18RR', help="Dataset used for evaluation.")
+    parser.add_argument("--dataset", type=str, default=WN18, help="Dataset used for evaluation.")
     parser.add_argument("--fold", type=str, default='valid', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
@@ -144,7 +160,6 @@ def main_decoder():
 
     fold = args.fold
     model_name = args.model
-
     wandb.init(project=args.model + '_' + 'ConvKB_' + dataset.name + '_' + fold + '_' + prefix + '_eval', config=args)
 
     evaluate_decoder(data_loader, fold, decoder, DECODER_DIR, model_name, head, dev=args.device)
