@@ -2,7 +2,7 @@ import torch
 import os.path as osp
 import wandb
 
-from data.dataset import FB15, FB15Dataset, WN18, WN18RR
+from data.dataset import FB15, FB15Dataset, WN18, WN18RR, KINSHIP, Kinship
 from dataloader import DataLoader
 from model import KBNet, DKBATNet, ConvKB
 
@@ -146,6 +146,8 @@ def get_data_loader(dataset_name):
         dataset = FB15Dataset()
     elif dataset_name == WN18:
         dataset = WN18RR()
+    elif dataset_name == KINSHIP:
+        dataset = Kinship()
     else:
         raise Exception('Database not found!')
     data_loader = DataLoader(dataset)

@@ -9,7 +9,7 @@ import sklearn as sk
 from sklearn.metrics import euclidean_distances
 from sqlalchemy import create_engine
 
-from data.dataset import FB15Dataset, WN18RR
+from data.dataset import FB15Dataset, WN18RR, Kinship
 from dataloader import DataLoader
 
 valid_triples = np.random.randint(0, 1500, size=(272115, 2))
@@ -26,7 +26,5 @@ def is_in(triplet):
 import wandb
 
 if __name__ == '__main__':
-    file = "eval_dir/encoder/encoder_dkbat_fb15k-237.pt"
-    e = torch.load(file)
-    epoch = e['epoch']
-    print(epoch)
+    dataset = Kinship()
+    dataset.pre_process()

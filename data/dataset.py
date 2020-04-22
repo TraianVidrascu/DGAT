@@ -17,6 +17,8 @@ ENDLIST = 'END'
 
 WN18 = 'WN18RR'
 FB15 = 'FB15K-237'
+KINSHIP = 'Kinship'
+
 
 class Dataset:
     def __init__(self, raw_dir, processed_dir, eval_dir, run_dir):
@@ -150,7 +152,7 @@ class Dataset:
         x, node_mapper = self.read_entities()
         g, rel_mapper = self.read_relations()
         self.read_edges(node_mapper, rel_mapper)
-        self.save_paths(2)
+        # self.save_paths(2)
         self.save_triplets_raw()
         self.filter_evaluation_folds()
         valid_triples = self.get_valid_triplets()
@@ -403,7 +405,7 @@ class FB15Dataset(Dataset):
         self.k = 237
         self.size_x = 100
         self.size_g = 100
-        self.name = 'FB15K-237'
+        self.name = FB15
 
 
 class WN18RR(Dataset):
@@ -414,4 +416,15 @@ class WN18RR(Dataset):
         self.k = 11
         self.size_x = 50
         self.size_g = 50
-        self.name = 'WN18RR'
+        self.name = WN18
+
+
+class Kinship(Dataset):
+    def __init__(self):
+        super().__init__('./data/kinship/raw/', './data/kinship/processed/', './data/kinship/evaluation/',
+                         './data/kinship/run/')
+        self.n = 104
+        self.k = 25
+        self.size_x = 200
+        self.size_g = 200
+        self.name = KINSHIP
