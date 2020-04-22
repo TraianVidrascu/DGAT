@@ -151,7 +151,7 @@ def evaluate_filtered(model, h, g, data_loader, fold, head, dev='cpu'):
 
             # remove it when runnig experiments, only for debug
             counter += 1
-            print("List %.d" % counter)
+            print("List %.d" % counter + ' rank: %.d' % rank.item())
         triplets_file.close()
         torch.cuda.empty_cache()
         ranks = np.array(ranks)

@@ -1,35 +1,12 @@
 import argparse
-import concurrent.futures
 
 import torch
-import numpy as np
 import wandb
 
-from data.dataset import FB15Dataset, WN18RR
-from dataloader import DataLoader
+from data.dataset import FB15, WN18
 from metrics import get_model_metrics
-from model import ConvKB
-from utilis import load_model, save_model, save_best_decoder, set_random_seed, load_embedding, save_embeddings
-
-KBAT = 'KBAT'
-DKBAT = 'DKBAT'
-
-DECODER = 'decoder'
-
-DECODER_FILE = 'decoder.pt'
-DECODER_CHECKPOINT = 'decoder_checkpoint.pt'
-EMBEDDING_DIR = './eval_dir/embeddings'
-
-
-def get_decoder(args):
-    channels = args.channels
-    dropout = args.dropout
-    input_size = args.output_encoder
-    dev = args.device
-
-    model = ConvKB(input_dim=input_size, input_seq_len=3, in_channels=1, out_channels=channels, drop_prob=dropout,
-                   dev=dev)
-    return model
+from utilis import save_best_decoder, set_random_seed, load_embedding, save_embeddings, \
+    DECODER, EMBEDDING_DIR, KBAT, get_decoder, DECODER_NAME, get_data_loader
 
 
 def train_decoder(args, decoder, data_loader, h, g):
@@ -49,7 +26,7 @@ def train_decoder(args, decoder, data_loader, h, g):
 
     _, _, graph = data_loader.load_train('cpu')
 
-    decoder_file = DECODER_FILE + '_' + model.lower() + '_' + dataset_name.lower() + '.pt'
+    decoder_file = DECODER_NAME + '_' + model.lower() + '_' + dataset_name.lower() + '.pt'
 
     first = 0
 
@@ -123,7 +100,7 @@ def train_decoder(args, decoder, data_loader, h, g):
         scheduler.step()
 
         loss_epoch = sum(losses) / len(losses)
-        save_best_decoder(decoder, loss_epoch, epoch + 1, decoder_file, asc=False)
+        save_best_decoder(decoder, loss_epoch, epoch + 1, decoder_file, args, asc=False)
 
         if (epoch + 1) % eval == 0:
             metrics = get_model_metrics(decoder, h, g, data_loader, 'test', DECODER, dev)
@@ -151,7 +128,7 @@ def main():
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
     parser.add_argument("--batch_size", type=int, default=1028, help="Batch size for decoder.")
     parser.add_argument("--negative-ratio", type=int, default=40, help="Number of negative samples.")
-    parser.add_argument("--dataset", type=str, default='WN18RR', help="Dataset used for training.")
+    parser.add_argument("--dataset", type=str, default=FB15, help="Dataset used for training.")
     parser.add_argument("--model", type=str, default=KBAT, help="Which model's embedding to use.")
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
@@ -169,11 +146,7 @@ def main():
     wandb.init(project=model_name, config=args)
 
     # load dataset
-    if args.dataset == 'FB15k-237':
-        dataset = FB15Dataset()
-    else:
-        dataset = WN18RR()
-    data_loader = DataLoader(dataset)
+    data_loader = get_data_loader(args.dataset)
 
     # load model architecture
     decoder = get_decoder(args)

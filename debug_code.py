@@ -26,15 +26,7 @@ def is_in(triplet):
 import wandb
 
 if __name__ == '__main__':
-    file_a = "eval_dir/check/encoder_kbat_fb15k-237.pt"
-    file_b = "eval_dir/check/encoder_kbat_fb15k-237_0.pt"
-    file_c = "./eval_dir/check/encoder_kbat_fb15k-237_server.pt"
-    a = torch.load(file_a)
-    b = torch.load(file_b)
-    c = torch.load(file_c)
-    a = a['model_state_dict']
-    b = b['model_state_dict']
-    c = c['model_state_dict']
-    for key in a.keys():
-        print((torch.sqrt(a[key]-b[key])**2).mean())
-        print((torch.sqrt(a[key]-c[key])**2).mean())
+    file = "eval_dir/encoder/encoder_dkbat_fb15k-237.pt"
+    e = torch.load(file)
+    epoch = e['epoch']
+    print(epoch)

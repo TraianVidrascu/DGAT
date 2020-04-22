@@ -2,66 +2,116 @@ import torch
 import os.path as osp
 import wandb
 
+from data.dataset import FB15, FB15Dataset, WN18, WN18RR
+from dataloader import DataLoader
+from model import KBNet, DKBATNet, ConvKB
 
-def save_model(model, metric, epoch, file):
-    path = osp.join(wandb.run.dir, file)
-    torch.save({'model_state_dict': model.state_dict(), 'epoch': epoch, 'metric': metric}, path)
+ENCODER = 'encoder'
+DKBAT = 'DKBAT'
+KBAT = 'KBAT'
 
+ENCODER_FILE = 'encoder.pt'
+DECODER_FILE = 'decoder.pt'
 
-def save_eval_model(model, model_name, dataset_name):
-    path = osp.join(wandb.run.dir, model_name.lower() + '_' + dataset_name.lower() + '.pt')
-    torch.save({'model_state_dict': model.state_dict()}, path)
+ENCODER_DIR = './eval_dir/encoder'
+DECODER_DIR = './eval_dir/decoder'
+EMBEDDING_DIR = './eval_dir/embeddings'
 
-
-def save_best_decoder(model, metric, epoch, file, asc=True):
-    path = osp.join(wandb.run.dir, file)
-    metric_old = None
-    if osp.exists(path):
-        model_dict = torch.load(path)
-        metric_old = model_dict['metric']
-
-    if metric_old is None:
-        save_model(model, metric, epoch, file)
-    elif asc and metric > metric_old:
-        save_model(model, metric, epoch, file)
-    elif metric < metric_old:
-        save_model(model, metric, epoch, file)
+DECODER = 'decoder'
+DECODER_NAME = 'ConvKB'
 
 
-def save_best_encoder(model, model_name, h, g, metric, epoch, file, asc=True):
-    path = osp.join(wandb.run.dir, file)
-    metric_old = None
-    if osp.exists(path):
-        model_dict = torch.load(path)
-        metric_old = model_dict['metric']
+def get_encoder(args, x_size, g_size):
+    # model parameters
+    model_name = args.model
+    h_size = args.hidden_encoder
+    o_size = args.output_encoder
+    heads = args.heads
+    margin = args.margin
+    alpha = args.alpha
+    dropout = args.dropout
+    negative_slope = args.negative_slope
 
-    if metric_old is None:
-        save_model(model, metric, epoch, file)
-        save_embeddings(h, g, model_name)
-    elif asc and metric > metric_old:
-        save_model(model, metric, epoch, file)
-        save_embeddings(h, g, model_name)
-    elif metric < metric_old:
-        save_model(model, metric, epoch, file)
-        save_embeddings(h, g, model_name)
+    dev = args.device
 
+    model = None
+    if model_name == KBAT:
+        model = KBNet(x_size, g_size, h_size, o_size, heads, margin, dropout, negative_slope=negative_slope, device=dev)
+    elif model_name == DKBAT:
+        model = DKBATNet(x_size, g_size, h_size, o_size, heads, alpha, margin, dropout, negative_slope=negative_slope,
+                         device=dev)
 
-def load_model(model, file):
-    path = osp.join(wandb.run.dir, file)
-    epoch = 0
-    if osp.exists(path):
-        model_dict = torch.load(path)
-        model.load_state_dict(model_dict['model_state_dict'])
-        epoch = model_dict['epoch']
-    return model, epoch
-
-
-def load_decoder_eval(model, rundir, model_name, dataset_name):
-    path = osp.join(rundir, 'decoder_' + model_name.lower() + '_' + dataset_name.lower() + '.pt')
-    if osp.exists(path):
-        model_dict = torch.load(path)
-        model.load_state_dict(model_dict['model_state_dict'])
     return model
+
+
+def get_decoder(args):
+    channels = args.channels
+    dropout = args.dropout
+    input_size = args.output_encoder
+    dev = args.device
+
+    model = ConvKB(input_dim=input_size, input_seq_len=3, in_channels=1, out_channels=channels, drop_prob=dropout,
+                   dev=dev)
+    return model
+
+
+def save_model(model, metric, epoch, file, args):
+    path = osp.join(wandb.run.dir, file)
+    torch.save({'model_state_dict': model.state_dict(), 'epoch': epoch, 'metric': metric, 'args': args}, path)
+
+
+def save_eval_model(model, model_name, dataset_name, args):
+    path = osp.join(wandb.run.dir, model_name.lower() + '_' + dataset_name.lower() + '.pt')
+    torch.save({'model_state_dict': model.state_dict(), 'args': args, 'dataset': dataset_name}, path)
+
+
+def save_best_decoder(model, metric, epoch, file, args, asc=True):
+    path = osp.join(wandb.run.dir, file)
+    metric_old = None
+    if osp.exists(path):
+        model_dict = torch.load(path)
+        metric_old = model_dict['metric']
+
+    if metric_old is None:
+        save_model(model, metric, epoch, file, args)
+    elif asc and metric > metric_old:
+        save_model(model, metric, epoch, file, args)
+    elif metric < metric_old:
+        save_model(model, metric, epoch, file, args)
+
+
+def save_best_encoder(model, model_name, h, g, metric, epoch, file, args, asc=True):
+    path = osp.join(wandb.run.dir, file)
+    metric_old = None
+    if osp.exists(path):
+        model_dict = torch.load(path)
+        metric_old = model_dict['metric']
+
+    if metric_old is None:
+        save_model(model, metric, epoch, file, args)
+        save_embeddings(h, g, model_name)
+    elif asc and metric > metric_old:
+        save_model(model, metric, epoch, file, args)
+        save_embeddings(h, g, model_name)
+    elif metric < metric_old:
+        save_model(model, metric, epoch, file, args)
+        save_embeddings(h, g, model_name)
+
+
+def load_model(path):
+    model_dict = torch.load(path)
+    state_dict = model_dict['model_state_dict']
+    epoch = model_dict['epoch']
+    args = model_dict['args']
+    return state_dict, epoch, args
+
+
+def load_decoder_eval(encoder_name, dataset_name):
+    path = osp.join(DECODER_DIR, DECODER_NAME + '_' + encoder_name.lower() + '_' + dataset_name.lower() + '.pt')
+    state_dict, epoch, args = load_model(path)
+    decoder = get_decoder(args)
+    decoder.load_state_dict(state_dict)
+    return decoder, epoch, args
 
 
 def load_embedding(model_name, rundir, dataset_name):
@@ -79,11 +129,27 @@ def save_embeddings(h, g, model_name):
     torch.save(g, path_g)
 
 
-def load_encoder_eval(model, rundir, model_name, dataset_name):
-    path = osp.join(rundir, model_name.lower() + '_' + dataset_name.lower() + '.pt')
-    model_dict = torch.load(path)['model_state_dict']
-    model.load_state_dict(model_dict)
-    return model
+def load_encoder_eval(model_name, data_loader):
+    x_size, g_size = data_loader.get_embedding_size()
+    dataset_name = data_loader.get_name()
+
+    path = osp.join(ENCODER_DIR, model_name.lower() + '_' + dataset_name.lower() + '.pt')
+    state_dict, epoch, args = load_model(path)
+
+    encoder = get_encoder(args, x_size, g_size)
+    encoder.load_state_dict(state_dict)
+    return encoder, epoch, args
+
+
+def get_data_loader(dataset_name):
+    if dataset_name == FB15:
+        dataset = FB15Dataset()
+    elif dataset_name == WN18:
+        dataset = WN18RR()
+    else:
+        raise Exception('Database not found!')
+    data_loader = DataLoader(dataset)
+    return data_loader
 
 
 def set_random_seed():

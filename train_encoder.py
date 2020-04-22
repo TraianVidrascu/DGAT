@@ -7,43 +7,10 @@ import torch.nn.functional as F
 
 import wandb
 
-from data.dataset import FB15Dataset, WN18RR
+from data.dataset import FB15, WN18
 from dataloader import DataLoader
 from metrics import get_model_metrics
-from model import KBNet, DKBATNet
-from utilis import save_best_encoder, load_model, set_random_seed, save_model
-
-FB15K = 'FB15K-237'
-WN18 = 'WN18RR'
-
-ENCODER = 'encoder'
-DKBAT = 'DKBAT'
-KBAT = 'KBAT'
-ENCODER_FILE = 'encoder.pt'
-ENCODER_CHECKPOINT = 'encoder_check.pt'
-
-
-def get_encoder(args, x_size, g_size):
-    # model parameters
-    model_name = args.model
-    h_size = args.hidden_encoder
-    o_size = args.output_encoder
-    heads = args.heads
-    margin = args.margin
-    alpha = args.alpha
-    dropout = args.dropout
-    negative_slope = args.negative_slope
-
-    dev = args.device
-
-    model = None
-    if model_name == KBAT:
-        model = KBNet(x_size, g_size, h_size, o_size, heads, margin, dropout, negative_slope=negative_slope, device=dev)
-    elif model_name == DKBAT:
-        model = DKBATNet(x_size, g_size, h_size, o_size, heads, alpha, margin, dropout, negative_slope=negative_slope,
-                         device=dev)
-
-    return model
+from utilis import save_best_encoder, set_random_seed, save_model, ENCODER, KBAT, DKBAT, get_encoder, get_data_loader
 
 
 def train_encoder(args, model, data_loader):
@@ -52,7 +19,7 @@ def train_encoder(args, model, data_loader):
     if args.debug == 1:
         model_name += '_debug'
 
-    run = wandb.init(project=model_name, config=args)
+    wandb.init(project=model_name, config=args)
 
     wandb.watch(model, log="all")
 
@@ -187,12 +154,12 @@ def train_encoder(args, model, data_loader):
                   'Loss Epoch: %.4f ' % loss_epoch +
                   'Loss Valid: %.4f ' % valid_loss)
 
-        save_best_encoder(model, args.model, h_prime, g_prime, loss_epoch, epoch + 1, encoder_file, asc=False)
+        save_best_encoder(model, args.model, h_prime, g_prime, loss_epoch, epoch + 1, encoder_file, args, asc=False)
         torch.cuda.empty_cache()
         if (epoch + 1) % eval == 0:
             encoder_epoch_file = ENCODER + '_' + args.model.lower() + '_' + dataset_name.lower() + '_' + str(
                 epoch) + '.pt'
-            save_model(model, loss_epoch, epoch + 1, encoder_epoch_file)
+            save_model(model, loss_epoch, epoch + 1, encoder_epoch_file, args)
             metrics = get_model_metrics(data_loader, h_prime, g_prime, 'valid', model, ENCODER, dev=args.device)
             metrics['train_' + dataset_name + '_Loss_encoder'] = loss_epoch
             metrics['valid_' + dataset_name + '_Loss_encoder'] = valid_loss
@@ -221,13 +188,6 @@ def embed_nodes(args, encoder, data):
     return h, g
 
 
-def load_encoder(args, g_size, x_size):
-    encoder = get_encoder(args, x_size, g_size)
-    encoder_file = ENCODER_FILE + '_' + args.model.lower() + '_' + args.dataset.lower() + '.pt'
-    encoder, _ = load_model(encoder, encoder_file)
-    return encoder
-
-
 def main():
     set_random_seed()
     torch.autograd.set_detect_anomaly(True)
@@ -235,7 +195,7 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=1, help="After how many epochs to evaluate.")
+    parser.add_argument("--eval", type=int, default=10, help="After how many epochs to evaluate.")
     parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
@@ -244,7 +204,7 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-3, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
-    parser.add_argument("--dataset", type=str, default=FB15K, help="Dataset used for training.")
+    parser.add_argument("--dataset", type=str, default=FB15, help="Dataset used for training.")
     parser.add_argument("--batch", type=int, default=272115, help="Batch size.")
     parser.add_argument("--negative_ratio", type=int, default=2, help="Number of negative edges per positive one.")
 
@@ -261,17 +221,10 @@ def main():
 
     args, cmdline_args = parser.parse_known_args()
 
-    if args.dataset == FB15K:
-        dataset = FB15Dataset()
-    elif args.dataset == WN18:
-        dataset = WN18RR()
-    else:
-        raise Exception('Database not found!')
-    data_loader = DataLoader(dataset)
+    data_loader = get_data_loader(args.dataset)
 
     # load model architecture
-    x_size = dataset.size_x
-    g_size = dataset.size_g
+    x_size, g_size = data_loader.get_embedding_size()
     model = get_encoder(args, x_size, g_size)
 
     # train model and save embeddings

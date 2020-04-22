@@ -9,6 +9,11 @@ class DataLoader:
     def __init__(self, dataset):
         self.dataset = dataset
 
+    def get_embedding_size(self):
+        x_size = self.dataset.size_x
+        g_size = self.dataset.size_g
+        return x_size, g_size
+
     def get_properties(self):
         n = self.dataset.n
         k = self.dataset.k

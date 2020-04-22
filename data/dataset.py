@@ -15,6 +15,8 @@ BEGINLIST = 'BEGIN'
 
 ENDLIST = 'END'
 
+WN18 = 'WN18RR'
+FB15 = 'FB15K-237'
 
 class Dataset:
     def __init__(self, raw_dir, processed_dir, eval_dir, run_dir):
