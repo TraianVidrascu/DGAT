@@ -4,7 +4,7 @@ import wandb
 
 from data.dataset import FB15, FB15Dataset, WN18, WN18RR, KINSHIP, Kinship
 from dataloader import DataLoader
-from model import KBNet, DKBATNet, ConvKB
+from model import KBNet, DKBATNet, ConvKB, WrapperConvKB
 
 ENCODER = 'encoder'
 DKBAT = 'DKBAT'
@@ -21,14 +21,13 @@ DECODER = 'decoder'
 DECODER_NAME = 'ConvKB'
 
 
-def get_encoder(args, x_size, g_size):
+def get_encoder(args, x, g):
     # model parameters
     model_name = args.model
     h_size = args.hidden_encoder
     o_size = args.output_encoder
     heads = args.heads
     margin = args.margin
-    alpha = args.alpha
     dropout = args.dropout
     negative_slope = args.negative_slope
 
@@ -36,22 +35,23 @@ def get_encoder(args, x_size, g_size):
 
     model = None
     if model_name == KBAT:
-        model = KBNet(x_size, g_size, h_size, o_size, heads, margin, dropout, negative_slope=negative_slope, device=dev)
+        model = KBNet(x, g, h_size, o_size, heads, margin, dropout, negative_slope=negative_slope, device=dev)
     elif model_name == DKBAT:
-        model = DKBATNet(x_size, g_size, h_size, o_size, heads, alpha, margin, dropout, negative_slope=negative_slope,
+        model = DKBATNet(x, g, h_size, o_size, heads, margin, dropout, negative_slope=negative_slope,
                          device=dev)
 
     return model
 
 
-def get_decoder(args):
+def get_decoder(args, h, g):
     channels = args.channels
     dropout = args.dropout
-    input_size = args.output_encoder
+    input_size = h.shape[1]
     dev = args.device
 
-    model = ConvKB(input_dim=input_size, input_seq_len=3, in_channels=1, out_channels=channels, drop_prob=dropout,
-                   dev=dev)
+    model = WrapperConvKB(h, g, input_dim=input_size, input_seq_len=3, in_channels=1, out_channels=channels,
+                          drop_prob=dropout,
+                          dev=dev)
     return model
 
 

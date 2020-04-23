@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 import wandb
 
-from data.dataset import FB15, WN18
+from data.dataset import FB15, WN18, KINSHIP
 from dataloader import DataLoader
 from metrics import get_model_metrics
 from utilis import save_best_encoder, set_random_seed, save_model, ENCODER, KBAT, DKBAT, get_encoder, get_data_loader
@@ -42,9 +42,6 @@ def train_encoder(args, model, data_loader):
     # load data
     x, g, graph = data_loader.load_train('cpu')
     n = x.shape[0]
-    # normalize input
-    x = F.normalize(x, p=2, dim=1).detach()
-    g = F.normalize(g, p=2, dim=1).detach()
 
     # load graph base structure
     edge_idx, edge_type = data_loader.graph2idx(graph, dev='cpu')
@@ -105,7 +102,7 @@ def train_encoder(args, model, data_loader):
 
             # forward pass the model; getting the node embeddings out of the structural information
             s_forward = time.time()
-            h_prime, g_prime = model(x.to(dev), g.to(dev), edge_idx.to(dev), edge_type.to(dev))
+            h_prime, g_prime = model(edge_idx.to(dev), edge_type.to(dev))
             t_forward = time.time()
 
             # compute model loss for positive and negative samples
@@ -142,7 +139,7 @@ def train_encoder(args, model, data_loader):
 
         # compute validation loss
         model.eval()
-        h_prime, g_prime = model(x.to(dev), g.to(dev), train_idx.to(dev), train_type.to(dev))
+        h_prime, g_prime = model(train_idx.to(dev), train_type.to(dev))
         valid_loss = model.loss(h_prime, g_prime, valid_pos_edge_epoch_idx.to(dev), valid_pos_edge_epoch_type.to(dev),
                                 valid_neg_edge_idx.to(dev), valid_pos_edge_epoch_type.to(dev)).item()
 
@@ -195,16 +192,16 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=10, help="After how many epochs to evaluate.")
+    parser.add_argument("--eval", type=int, default=1, help="After how many epochs to evaluate.")
     parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=1, help="Number of training epochs for encoder.")
-    parser.add_argument("--step_size", type=int, default=1, help="Step size of scheduler.")
+    parser.add_argument("--step_size", type=int, default=500, help="Step size of scheduler.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
-    parser.add_argument("--decay", type=float, default=1e-3, help="L2 normalization weight decay encoder.")
+    parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
-    parser.add_argument("--dataset", type=str, default=FB15, help="Dataset used for training.")
+    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for training.")
     parser.add_argument("--batch", type=int, default=272115, help="Batch size.")
     parser.add_argument("--negative_ratio", type=int, default=2, help="Number of negative edges per positive one.")
 
@@ -215,8 +212,7 @@ def main():
     parser.add_argument("--negative_slope", type=float, default=0.2, help="Negative slope for Leaky Relu")
     parser.add_argument("--heads", type=int, default=2, help="Number of heads per layer")
     parser.add_argument("--hidden_encoder", type=int, default=200, help="Number of neurons per hidden layer")
-    parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
-    parser.add_argument("--alpha", type=float, default=0.5, help="Inbound neighborhood importance.")
+    parser.add_argument("--output_encoder", type=int, default=400, help="Number of neurons per output layer")
     parser.add_argument("--model", type=str, default=KBAT, help='Model name')
 
     args, cmdline_args = parser.parse_known_args()
@@ -224,8 +220,8 @@ def main():
     data_loader = get_data_loader(args.dataset)
 
     # load model architecture
-    x_size, g_size = data_loader.get_embedding_size()
-    model = get_encoder(args, x_size, g_size)
+    x, g, _ = data_loader.load('train')
+    model = get_encoder(args, x, g)
 
     # train model and save embeddings
     train_encoder(args, model, data_loader)
