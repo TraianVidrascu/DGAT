@@ -169,7 +169,6 @@ class KB(nn.Module):
         self.n = x.shape[0]
         self.m = g.shape[0]
 
-        x = F.normalize(x, p=2, dim=1).detach()
         self.x_initial = nn.Parameter(x, requires_grad=False)
         self.g_initial = nn.Parameter(g, requires_grad=True)
         self.to(dev)
@@ -236,7 +235,9 @@ class DKBATNet(KB):
 
     def forward(self, edge_idx, edge_type):
         torch.cuda.empty_cache()
-
+        self.x_initial.data = F.normalize(
+            self.x_initial.data, p=2, dim=1).detach()
+        
         row, col = edge_idx
         rel = edge_type
         h_ijk = torch.cat([self.x_initial[row], self.x_initial[col], self.g_initial[rel]], dim=1)
@@ -295,6 +296,8 @@ class KBNet(KB):
 
     def forward(self, edge_idx, edge_type):
         torch.cuda.empty_cache()
+        self.x_initial.data = F.normalize(
+            self.x_initial.data, p=2, dim=1).detach()
 
         row, col = edge_idx
         rel = edge_type
