@@ -237,7 +237,7 @@ class DKBATNet(KB):
         torch.cuda.empty_cache()
         self.x_initial.data = F.normalize(
             self.x_initial.data, p=2, dim=1).detach()
-        
+
         row, col = edge_idx
         rel = edge_type
         h_ijk = torch.cat([self.x_initial[row], self.x_initial[col], self.g_initial[rel]], dim=1)

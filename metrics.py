@@ -24,8 +24,7 @@ def mean_reciprocal_rank(ranks):
 
 
 def mean_rank(ranks):
-    # ToDo: check if I should give a real rank
-    return np.floor(ranks.mean())
+    return ranks.mean()
 
 
 def hits_at(ranks, n=1):

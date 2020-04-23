@@ -106,10 +106,12 @@ def load_model(path):
     return state_dict, epoch, args
 
 
-def load_decoder_eval(encoder_name, dataset_name):
+def load_decoder_eval(encoder_name, data_loader,h, g):
+    dataset_name = data_loader.get_name()
     path = osp.join(DECODER_DIR, DECODER_NAME + '_' + encoder_name.lower() + '_' + dataset_name.lower() + '.pt')
     state_dict, epoch, args = load_model(path)
-    decoder = get_decoder(args)
+
+    decoder = get_decoder(args, h, g)
     decoder.load_state_dict(state_dict)
     return decoder, epoch, args
 
@@ -130,13 +132,13 @@ def save_embeddings(h, g, model_name):
 
 
 def load_encoder_eval(model_name, data_loader):
-    x_size, g_size = data_loader.get_embedding_size()
+    x, g,_ = data_loader.load('train')
     dataset_name = data_loader.get_name()
 
     path = osp.join(ENCODER_DIR, model_name.lower() + '_' + dataset_name.lower() + '.pt')
     state_dict, epoch, args = load_model(path)
 
-    encoder = get_encoder(args, x_size, g_size)
+    encoder = get_encoder(args, x, g)
     encoder.load_state_dict(state_dict)
     return encoder, epoch, args
 

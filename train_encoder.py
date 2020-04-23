@@ -192,17 +192,17 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=1, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
+    parser.add_argument("--eval", type=int, default=100, help="After how many epochs to evaluate.")
+    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=1, help="Number of training epochs for encoder.")
+    parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
     parser.add_argument("--step_size", type=int, default=500, help="Step size of scheduler.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training.")
     parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for training.")
-    parser.add_argument("--batch", type=int, default=272115, help="Batch size.")
+    parser.add_argument("--batch", type=int, default= 8544, help="Batch size.")
     parser.add_argument("--negative_ratio", type=int, default=2, help="Number of negative edges per positive one.")
 
     # objective function parameters
