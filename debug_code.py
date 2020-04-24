@@ -26,5 +26,6 @@ def is_in(triplet):
 import wandb
 
 if __name__ == '__main__':
-    dataset = Kinship()
-    dataset.pre_process()
+    file = './eval_dir/check/encoder_kbat_kinship_0.pt'
+    a = torch.load(file)
+    print(a)

@@ -105,19 +105,18 @@ class RelationalAttentionLayer(nn.Module):
 
 
 class EntityLayer(nn.Module):
-    def __init__(self, initial_size, heads, layer_size, device='cpu'):
+    def __init__(self, initial_size, layer_size, device='cpu'):
         super(EntityLayer, self).__init__()
         # entity embedding
         self.weights_ent = nn.Linear(initial_size, layer_size)
         self.init_params()
         self.to(device)
-        self.heads = heads
 
     def init_params(self):
         nn.init.xavier_normal_(self.weights_ent.weight, gain=1.414)
 
     def forward(self, x, h):
-        h_prime = self.weights_ent(x)[:, None, :] + h
+        h_prime = self.weights_ent(x) + h
 
         return h_prime
 
@@ -281,7 +280,7 @@ class KBNet(KB):
                                                      dropout=dropout,
                                                      device=device)
 
-        self.entity_layer = EntityLayer(self.x_size, heads, output_size, device=device)
+        self.entity_layer = EntityLayer(self.x_size, heads * output_size, device=device)
         self.relation_layer = RelationLayer(self.g_size, output_size * heads, device=device)
 
         self.loss_fct = nn.MarginRankingLoss(margin=margin)
@@ -307,8 +306,8 @@ class KBNet(KB):
         # compute embedding
         h = self.input_layer(h_ijk, col, self.n)
         h = self.actv(h)
-        h = F.normalize(h, p=2, dim=2)
         h = self._concat(h)
+        h = F.normalize(h, p=2, dim=1)
 
         # edge representation
         h_ijk = torch.cat([h[row], h[col], self.g_initial[rel]], dim=1)
@@ -316,15 +315,14 @@ class KBNet(KB):
         # compute last layer embedding
         h = self.output_layer(h_ijk, col, self.n)
         h = self.actv(h)
-        h = F.normalize(h, p=2, dim=2)
+        h = self._concat(h)
 
         # add initial embeddings to last layer
         h_prime = self.entity_layer(self.x_initial, h)
         g_prime = self.relation_layer(self.g_initial)
 
         # normalize last layer
-        h_prime = F.normalize(h_prime, p=2, dim=2)
-        h_prime = self._concat(h_prime)
+        h_prime = F.normalize(h_prime, p=2, dim=1)
 
         return h_prime, g_prime
 
@@ -335,7 +333,7 @@ class WrapperConvKB(nn.Module):
         self.conv = ConvKB(input_dim, input_seq_len, in_channels, out_channels, drop_prob, dev)
 
         self.node_embeddings = nn.Parameter(torch.rand(size=h.shape), requires_grad=True)
-        self.rel_embeddings = nn.Parameter(torch.rand(size=g.shape), requires_grad=True)
+        self.rel_embeddings = nn.Parameter(torch.rand(size=g.shape), requires_grad=False)
 
         self.node_embeddings.data = h
         self.rel_embeddings.data = g
@@ -390,6 +388,7 @@ class ConvKB(nn.Module):
 
         input_fc = out_conv.squeeze(-1).view(batch_size, -1)
         output = self.fc_layer(input_fc)
+        output = F.leaky_relu(output,0.2)
         return output
 
     def evaluate(self, h, g, edge_idx, batch_type):

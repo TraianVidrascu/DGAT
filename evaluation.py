@@ -15,12 +15,11 @@ import os.path as osp
 def get_embeddings(data_loader, dev, encoder):
     x, g, graph = data_loader.load_train(dev)
     # normalize input
-    x = F.normalize(x, p=2, dim=1).detach()
-    g = F.normalize(g, p=2, dim=1).detach()
+
     edge_idx, edge_type = DataLoader.graph2idx(graph, dev=dev)
     with torch.no_grad():
         encoder.eval()
-        h_prime, g_prime = encoder(x, g, edge_idx, edge_type)
+        h_prime, g_prime = encoder(edge_idx, edge_type)
     return h_prime, g_prime
 
 
@@ -50,7 +49,7 @@ def evaluate_decoder(data_loader, fold, model_name, head, dev='cpu'):
     dataset_name = data_loader.get_name()
     h, g = load_embedding(model_name, EMBEDDING_DIR, dataset_name)
 
-    decoder, _, _ = load_decoder_eval(model_name, dataset_name)
+    decoder, _, _ = load_decoder_eval(model_name, data_loader,h, g)
 
     metrics = get_model_metrics_head_or_tail(data_loader, h, g, fold, decoder, 'decoder', head, dev=dev)
     print(model_name + '_ConvKB ' + data_loader.get_name() + ' ' + fold + ' metrics:')
@@ -64,10 +63,10 @@ def main_encoder():
     # evaluation parameters
     parser.add_argument("--model", type=str, default=KBAT, help="Model used for evaluation")
     parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for evaluation.")
-    parser.add_argument("--fold", type=str, default='valid', help="Fold used for evaluation.")
+    parser.add_argument("--fold", type=str, default='test', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
-    parser.add_argument("--save", type=int, default=0, help="Save node embedding.")
+    parser.add_argument("--save", type=int, default=1, help="Save node embedding.")
     parser.add_argument("--eval", type=int, default=1, help="Evaluate encoder.")
     parser.add_argument("--device", type=str, default='cuda', help="Device to run model.")
 

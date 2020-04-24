@@ -3,10 +3,10 @@ import argparse
 import torch
 import wandb
 
-from data.dataset import FB15, WN18
+from data.dataset import FB15, WN18, KINSHIP
 from metrics import get_model_metrics
 from utilis import save_best_decoder, set_random_seed, load_embedding, save_embeddings, \
-    DECODER, EMBEDDING_DIR, KBAT, get_decoder, DECODER_NAME, get_data_loader
+    DECODER, EMBEDDING_DIR, KBAT, get_decoder, DECODER_NAME, get_data_loader, save_model
 
 
 def train_decoder(args, decoder, data_loader, h, g):
@@ -38,6 +38,15 @@ def train_decoder(args, decoder, data_loader, h, g):
 
     m = train_pos_idx.shape[1]
     n = h.shape[0]
+
+    # validation set
+    # _, _, graph_valid = data_loader.load('valid')
+    # valid_idx, valid_type = data_loader.graph2idx(graph_valid, 'cpu')
+    # valid_head_invalid_sampling, valid_tail_invalid_sampling = data_loader.load_invalid_sampling('valid')
+    # _, valid_neg_idx, valid_neg_type = data_loader.negative_samples(n, valid_idx, valid_type, negative_ratio,
+    #                                                                 valid_head_invalid_sampling,
+    #                                                                 valid_tail_invalid_sampling,
+    #                                                                 'cpu')
 
     criterion = torch.nn.SoftMarginLoss()
     for epoch in range(first, epochs):
@@ -75,13 +84,9 @@ def train_decoder(args, decoder, data_loader, h, g):
             target_batch = torch.cat([torch.ones(no_pos), -torch.ones(no_neg)])
             batch_idx = torch.cat([batch_pos_idx, batch_neg_idx], dim=1)
             batch_type = torch.cat([batch_pos_type, batch_neg_type])
-            row, col = batch_idx
-
-            # prepare input
-            h_ijk = torch.stack([h[row], h[col], g[batch_type]], dim=1).to(dev)
 
             # forward input
-            prediction = decoder(h_ijk)
+            prediction = decoder(batch_idx, batch_type)
 
             # compute loss
             loss = criterion(prediction.squeeze(-1), target_batch.to(dev))
@@ -103,7 +108,10 @@ def train_decoder(args, decoder, data_loader, h, g):
         save_best_decoder(decoder, loss_epoch, epoch + 1, decoder_file, args, asc=False)
 
         if (epoch + 1) % eval == 0:
-            metrics = get_model_metrics(decoder, h, g, data_loader, 'test', DECODER, dev)
+            decoder_epoch_file = DECODER_NAME + '_' + model.lower() + '_' + dataset_name.lower() + '_' + str(
+                epoch + 1) + '.pt'
+            save_model(decoder, loss_epoch, epoch + 1, decoder_epoch_file, args)
+            metrics = get_model_metrics(data_loader, h, g, 'valid', decoder, DECODER, dev)
             metrics['train_' + dataset_name + '_Loss_decoder'] = loss_epoch
             wandb.log(metrics)
         else:
@@ -121,21 +129,19 @@ def main():
     parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=20, help="Number of training epochs for decoder.")
-    parser.add_argument("--step_size", type=int, default=5, help="Step size of scheduler.")
+    parser.add_argument("--epochs", type=int, default=400, help="Number of training epochs for decoder.")
+    parser.add_argument("--step_size", type=int, default=25, help="Step size of scheduler.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay decoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
-    parser.add_argument("--batch_size", type=int, default=1028, help="Batch size for decoder.")
-    parser.add_argument("--negative-ratio", type=int, default=40, help="Number of negative samples.")
-    parser.add_argument("--dataset", type=str, default=FB15, help="Dataset used for training.")
+    parser.add_argument("--batch_size", type=int, default=128, help="Batch size for decoder.")
+    parser.add_argument("--negative-ratio", type=int, default=10, help="Number of negative samples.")
+    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for training.")
     parser.add_argument("--model", type=str, default=KBAT, help="Which model's embedding to use.")
     # objective function parameters
-    parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
 
     # decoder parameters
     parser.add_argument("--channels", type=int, default=50, help="Number of channels for decoder.")
-    parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
 
     args, cmdline_args = parser.parse_known_args()
 
@@ -149,18 +155,13 @@ def main():
     data_loader = get_data_loader(args.dataset)
 
     # load model architecture
-    decoder = get_decoder(args)
 
     h, g = load_embedding(args.model, EMBEDDING_DIR, args.dataset)
+    decoder = get_decoder(args, h, g)
     save_embeddings(h, g, model_name)
     # train decoder model
     train_decoder(args, decoder, data_loader, h, g)
     print('done training!')
-
-    # Evaluate test and valid fold after training is done
-    metrics = get_model_metrics(decoder, h, g, data_loader, 'test', DECODER, args.device)
-    print('done eval test!')
-    wandb.log(metrics)
 
 
 if __name__ == "__main__":
