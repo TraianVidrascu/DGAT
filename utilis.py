@@ -24,7 +24,6 @@ DECODER_NAME = 'ConvKB'
 def get_encoder(args, x, g):
     # model parameters
     model_name = args.model
-    h_size = args.hidden_encoder
     o_size = args.output_encoder
     heads = args.heads
     margin = args.margin
@@ -35,9 +34,9 @@ def get_encoder(args, x, g):
 
     model = None
     if model_name == KBAT:
-        model = KBNet(x, g, h_size, o_size, heads, margin, dropout, negative_slope=negative_slope, device=dev)
+        model = KBNet(x, g,  o_size, heads, margin, dropout, negative_slope=negative_slope, device=dev)
     elif model_name == DKBAT:
-        model = DKBATNet(x, g, h_size, o_size, heads, margin, dropout, negative_slope=negative_slope,
+        model = DKBATNet(x, g,  o_size, heads, margin, dropout, negative_slope=negative_slope,
                          device=dev)
 
     return model

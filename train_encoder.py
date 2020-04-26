@@ -147,7 +147,8 @@ def train_encoder(args, model, data_loader):
 
         t_epcoh = time.time()
         if args.debug == 1:
-            print('Epoch time: %.4f ' % (t_epcoh - s_epoch) +
+            print('Epoch: %.d ' % (epoch + 1) +
+                  'Epoch time: %.4f ' % (t_epcoh - s_epoch) +
                   'Loss Epoch: %.4f ' % loss_epoch +
                   'Loss Valid: %.4f ' % valid_loss)
 
@@ -193,7 +194,7 @@ def main():
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval", type=int, default=100, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
+    parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
@@ -202,7 +203,7 @@ def main():
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="out for training.")
     parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for training.")
-    parser.add_argument("--batch", type=int, default=8544, help="Batch size.")
+    parser.add_argument("--batch", type=int, default=80544, help="Batch size.")
     parser.add_argument("--negative_ratio", type=int, default=2, help="Number of negative edges per positive one.")
 
     # objective function parameters
@@ -211,7 +212,6 @@ def main():
     # encoder parameters
     parser.add_argument("--negative_slope", type=float, default=0.2, help="Negative slope for Leaky Relu")
     parser.add_argument("--heads", type=int, default=2, help="Number of heads per layer")
-    parser.add_argument("--hidden_encoder", type=int, default=400, help="Number of neurons per hidden layer")
     parser.add_argument("--output_encoder", type=int, default=400, help="Number of neurons per output layer")
     parser.add_argument("--model", type=str, default=KBAT, help='Model name')
 

@@ -6,14 +6,14 @@ from torch_scatter import scatter_add
 
 class RelationalAttentionLayer(nn.Module):
     def __init__(self, in_size_h, in_size_g, out_size, heads=2, concat=True, bias=True,
-                 negative_slope=1e-2, dropout=0.3, device='cpu'):
+                 negative_slope=2e-1, dropout=0.3, device='cpu'):
         super(RelationalAttentionLayer, self).__init__()
         # forward layers
         self.fc1 = nn.Linear(2 * in_size_h + in_size_g, heads * out_size, bias=bias)
 
         # attention layers
         self.weights_att = nn.Parameter(torch.Tensor(1, heads, out_size))
-        self.att_actv = nn.LeakyReLU(negative_slope)
+        self.leaky_relu = nn.LeakyReLU(negative_slope)
         self.att_softmax = nn.Softmax()
 
         self.to(device)
@@ -54,6 +54,10 @@ class RelationalAttentionLayer(nn.Module):
 
         return edge_softmax
 
+    def _concat(self, h):
+        h = torch.cat([h[:, i, :] for i in range(self.heads)], dim=1)
+        return h
+
     def _aggregate(self, end_nodes, alpha, c_ijk):
         a = alpha * c_ijk
 
@@ -62,14 +66,14 @@ class RelationalAttentionLayer(nn.Module):
         end_nodes = torch.cat([end_nodes, self.self_edge_mask.type_as(end_nodes)])
 
         h = scatter_add(a, end_nodes, dim=0)
+
         return h
 
     def _attention(self, c_ijk, end_nodes):
         a_ijk = torch.sum(self.weights_att * c_ijk, dim=2)[:, :, None]
-        b_ijk = self.att_actv(a_ijk)
+        b_ijk = -self.leaky_relu(a_ijk)  # see if let negative
 
         alpha = RelationalAttentionLayer._sofmax(end_nodes, b_ijk)
-
         alpha = self.dropout(alpha)
         return alpha
 
@@ -101,6 +105,10 @@ class RelationalAttentionLayer(nn.Module):
 
         # aggregate node representation
         h = self._aggregate(ends, alpha, c_ijk)
+        h = F.elu(h)
+
+        if self.concat:
+            h = self._concat(h)
         return h
 
 
@@ -192,10 +200,6 @@ class KB(nn.Module):
             scores = torch.detach(KB._dissimilarity(h, g, triplets, triplets_type).cpu()).numpy()
         return scores
 
-    def _concat(self, h):
-        h = torch.cat([h[:, i, :] for i in range(self.heads)], dim=1)
-        return h
-
 
 class DKBATNet(KB):
     def __init__(self, x, g, hidden_size, output_size, heads, margin=1, dropout=0.3,
@@ -227,8 +231,6 @@ class DKBATNet(KB):
         self.heads = heads
         self.output_size = output_size
         self.hidden_size = hidden_size
-
-        self.actv = nn.LeakyReLU(negative_slope)
 
         self.to(device)
 
@@ -271,14 +273,15 @@ class DKBATNet(KB):
 
 
 class KBNet(KB):
-    def __init__(self, x, g, hidden_size, output_size, heads, margin=1, dropout=0.3, negative_slope=0.2,
+    def __init__(self, x, g, output_size, heads, margin=1, dropout=0.3, negative_slope=0.2,
                  device='cpu'):
         super(KBNet, self).__init__(x, g, device)
-        self.input_layer = RelationalAttentionLayer(self.x_size, self.g_size, hidden_size, heads, dropout=dropout,
-                                                    device=device)
-        self.output_layer = RelationalAttentionLayer(heads * hidden_size, self.g_size, output_size, heads,
-                                                     dropout=dropout,
-                                                     device=device)
+        self.input_attention_layer = RelationalAttentionLayer(self.x_size, self.g_size, output_size, heads,
+                                                              dropout=dropout,
+                                                              device=device)
+        self.output_attention_layer = RelationalAttentionLayer(output_size * heads, output_size * heads,
+                                                               output_size * heads, 1, dropout=dropout,
+                                                               device=device, concat=False)
 
         self.entity_layer = EntityLayer(self.x_size, heads * output_size, device=device)
         self.relation_layer = RelationLayer(self.g_size, output_size * heads, device=device)
@@ -287,11 +290,9 @@ class KBNet(KB):
 
         self.heads = heads
         self.output_size = output_size
-        self.hidden_size = hidden_size
 
+        self.dropout = nn.Dropout(dropout)
         self.to(device)
-
-        self.actv = nn.LeakyReLU(negative_slope)
 
     def forward(self, edge_idx, edge_type):
         torch.cuda.empty_cache()
@@ -304,22 +305,18 @@ class KBNet(KB):
         h_ijk = torch.cat([self.x_initial[row], self.x_initial[col], self.g_initial[rel]], dim=1)
 
         # compute embedding
-        h = self.input_layer(h_ijk, col, self.n)
-        h = self.actv(h)
-        h = self._concat(h)
-        h = F.normalize(h, p=2, dim=1)
+        h = self.input_attention_layer(h_ijk, col, self.n)
 
-        # edge representation
-        h_ijk = torch.cat([h[row], h[col], self.g_initial[rel]], dim=1)
+        h = self.dropout(h)
 
-        # compute last layer embedding
-        h = self.output_layer(h_ijk, col, self.n)
-        h = self.actv(h)
-        h = self._concat(h)
+        g_prime = self.relation_layer(self.g_initial)
+
+        # computer edge representation for second layer
+        h_ijk = torch.cat([h[row], h[col], g_prime[rel]], dim=1)
+        h = self.output_attention_layer(h_ijk, col, self.n).squeeze()
 
         # add initial embeddings to last layer
         h_prime = self.entity_layer(self.x_initial, h)
-        g_prime = self.relation_layer(self.g_initial)
 
         # normalize last layer
         h_prime = F.normalize(h_prime, p=2, dim=1)
@@ -388,7 +385,6 @@ class ConvKB(nn.Module):
 
         input_fc = out_conv.squeeze(-1).view(batch_size, -1)
         output = self.fc_layer(input_fc)
-        output = F.leaky_relu(output,0.2)
         return output
 
     def evaluate(self, h, g, edge_idx, batch_type):
