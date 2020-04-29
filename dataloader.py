@@ -165,8 +165,8 @@ class DataLoader:
         neg_idx = torch.cat(neg_idx, dim=1)
 
         # # put negative sample of same edge together
-        pos_edge_idx = edge_idx.repeat((negative_ratio, 1)).t().flatten().view(-1, 2).t()
-        edge_type = edge_type[None, :].repeat((negative_ratio, 1)).t().flatten()
+        pos_edge_idx = edge_idx.repeat((1, negative_ratio))
+        edge_type = edge_type.repeat(negative_ratio)
 
         return pos_edge_idx.to(dev), neg_idx.to(dev), edge_type.to(dev)
 

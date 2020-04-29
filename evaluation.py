@@ -5,6 +5,7 @@ import wandb
 from data.dataset import FB15, WN18, KINSHIP
 from dataloader import DataLoader
 from metrics import get_model_metrics_head_or_tail
+from model import KB
 from utilis import load_decoder_eval, load_encoder_eval, load_embedding, save_eval_model, KBAT, EMBEDDING_DIR, DKBAT, \
     get_data_loader
 
@@ -24,8 +25,7 @@ def get_embeddings(data_loader, dev, encoder):
 
 
 def evaluate_encoder(data_loader, fold, encoder, embedding_model, head, dev='cpu'):
-    h_prime, g_prime = get_embeddings(data_loader, dev, encoder)
-    metrics = get_model_metrics_head_or_tail(data_loader, h_prime, g_prime, fold, encoder, 'encoder', head, dev=dev)
+    metrics = get_model_metrics_head_or_tail(data_loader, fold, encoder, 'encoder', head, dev=dev)
     print(embedding_model + data_loader.get_name() + ' ' + fold + ' metrics:')
     print(metrics)
     wandb.log(metrics)
@@ -45,11 +45,37 @@ def save_embedding(data_loader, encoder, embedding_model, dev='cpu'):
     torch.save(g_prime, g_path)
 
 
+def evaluate_embeddings(data_loader, fold, h, g, head, dev):
+    encoder = KB(h, g)
+    metrics = get_model_metrics_head_or_tail(data_loader, fold, encoder, 'encoder', head, dev=dev)
+    print(metrics)
+
+
+def run_embeddings():
+    parser = argparse.ArgumentParser()
+
+    # evaluation parameters
+    parser.add_argument("--model", type=str, default=KBAT, help="Model used for evaluation")
+    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for evaluation.")
+    parser.add_argument("--fold", type=str, default='test', help="Fold used for evaluation.")
+    parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
+    parser.add_argument("--device", type=str, default='cuda', help="Device to run model.")
+
+    args, cmdline_args = parser.parse_known_args()
+
+    data_loader = get_data_loader(args.dataset)
+
+    dataset_name = data_loader.get_name()
+    fold = args.fold
+    h, g = load_embedding(args.model, EMBEDDING_DIR, dataset_name)
+    evaluate_embeddings(data_loader, fold, h, g, args.head, dev=args.device)
+
+
 def evaluate_decoder(data_loader, fold, model_name, head, dev='cpu'):
     dataset_name = data_loader.get_name()
     h, g = load_embedding(model_name, EMBEDDING_DIR, dataset_name)
 
-    decoder, _, _ = load_decoder_eval(model_name, data_loader,h, g)
+    decoder, _, _ = load_decoder_eval(model_name, data_loader, h, g)
 
     metrics = get_model_metrics_head_or_tail(data_loader, h, g, fold, decoder, 'decoder', head, dev=dev)
     print(model_name + '_ConvKB ' + data_loader.get_name() + ' ' + fold + ' metrics:')
@@ -122,4 +148,4 @@ def main_decoder():
 
 
 if __name__ == '__main__':
-    main_encoder()
+    run_embeddings()

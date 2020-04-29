@@ -1,45 +1,45 @@
 import numpy as np
-import pandas as pd
 import torch
 
 from dataloader import DataLoader
 
 
 def rank_triplet(scores, position):
-    labels = np.zeros_like(scores)
-    labels[position] = 1
-    entries = np.stack([scores, labels]).transpose()
-
-    df = pd.DataFrame(columns=['score', 'label'], data=entries)
-    df = df.sort_values(by=['score'], ascending=False)
-    df.index = [i for i in range(1, len(scores) + 1)]
-    rank = df[df['label'] == 1].index
+    sorted_scores, sorted_indices = torch.sort(
+        scores.view(-1), dim=-1, descending=True)
+    rank = (sorted_indices == position).nonzero() + 1
     return rank
 
 
 def mean_reciprocal_rank(ranks):
-    reciprocal_ranks = 1 / ranks
-    mrr = reciprocal_ranks.mean()
-    return mrr
+    tensor = torch.FloatTensor(ranks)
+    tensor = 1 / tensor
+    mrr = torch.sum(tensor) / len(ranks)
+    return mrr.item()
 
 
 def mean_rank(ranks):
-    return ranks.mean()
+    return sum(ranks).item() / len(ranks)
 
 
-def hits_at(ranks, n=1):
-    no_ranks = ranks.shape[0]
-    hits = np.sum(ranks <= n)
-    hits_mean = hits / no_ranks
-    return hits_mean
+def hits_at(ranks):
+    hits_1 = 0
+    hits_3 = 0
+    hits_10 = 0
+    for i in range(len(ranks)):
+        hits_1 += 1 if ranks[i] == 1 else 0
+        hits_3 += 1 if ranks[i] <= 3 else 0
+        hits_10 += 1 if ranks[i] <= 10 else 0
+    hits_1 /= len(ranks)
+    hits_3 /= len(ranks)
+    hits_10 /= len(ranks)
+    return hits_1, hits_3, hits_10
 
 
 def get_metrics(ranks):
     mr = mean_rank(ranks)
     mrr = mean_reciprocal_rank(ranks)
-    hits_1 = hits_at(ranks, 1)
-    hits_3 = hits_at(ranks, 3)
-    hits_10 = hits_at(ranks, 10)
+    hits_1, hits_3, hits_10 = hits_at(ranks)
 
     return mr, mrr, hits_1, hits_3, hits_10
 
@@ -55,9 +55,9 @@ def get_ranking_metric(ranking_name, ranking, model_name, dataset_name, fold):
     return metrics
 
 
-def get_model_metrics(data_loader, h, g, fold, model, model_name, dev='cpu'):
-    ranks_head = evaluate_filtered(model, h, g, data_loader, fold, True, dev)
-    ranks_tail = evaluate_filtered(model, h, g, data_loader, fold, False, dev)
+def get_model_metrics(data_loader, fold, model, model_name, dev='cpu'):
+    ranks_head = evaluate_filtered(model, data_loader, fold, True, dev)
+    ranks_tail = evaluate_filtered(model, data_loader, fold, False, dev)
     ranks = np.concatenate((ranks_head, ranks_tail))
 
     dataset_name = data_loader.get_name()
@@ -70,8 +70,8 @@ def get_model_metrics(data_loader, h, g, fold, model, model_name, dev='cpu'):
     return metrics
 
 
-def get_model_metrics_head_or_tail(data_loader, h, g, fold, model, model_name, head, dev='cpu'):
-    ranks = evaluate_filtered(model, h, g, data_loader, fold, head, dev)
+def get_model_metrics_head_or_tail(data_loader, fold, model, model_name, head, dev='cpu'):
+    ranks = evaluate_filtered(model, data_loader, fold, head, dev)
 
     dataset_name = data_loader.get_name()
     part = 'head' if head else 'tail'
@@ -96,40 +96,7 @@ def evaluate_list(model, h, g, corrupted, list_info, head):
     return rank
 
 
-def evaluate(model, h, g, dataloader, fold, dev='cpu'):
-    with torch.no_grad():
-        # load corrupted head triplets
-        triplets_head, lists_head = dataloader.load_evaluation_triplets_raw(fold=fold, head=True, dev='cpu')
-        # load corrupted tail triplets
-        triplets_tail, lists_tail = dataloader.load_evaluation_triplets_raw(fold=fold, head=False, dev='cpu')
-
-        no_lists = triplets_head.shape[0]
-        ranks_head = []
-        ranks_tail = []
-
-        for list_idx in range(no_lists):
-            # evaluate for corrupted head triplets
-
-            rank_head = evaluate_list(model, h.to(dev), g.to(dev), triplets_head[list_idx, :].to(dev),
-                                      lists_head[:, list_idx].to(dev), True)
-            # evaluate for corrupted tail triplets
-            rank_tail = evaluate_list(model, h.to(dev), g.to(dev), triplets_tail[list_idx, :].to(dev),
-                                      lists_tail[:, list_idx].to(dev), False)
-
-            ranks_head.append(rank_head)
-            ranks_tail.append(rank_tail)
-
-        ranks = ranks_head + ranks_tail
-
-        # convert to numpy arrays
-        ranks_head = np.array(ranks_head)
-        ranks_tail = np.array(ranks_tail)
-        ranks = np.array(ranks)
-
-        return ranks_head, ranks_tail, ranks
-
-
-def evaluate_filtered(model, h, g, data_loader, fold, head, dev='cpu'):
+def evaluate_filtered(model, data_loader, fold, head, dev='cpu'):
     with torch.no_grad():
         # load corrupted head triplets
 
@@ -142,10 +109,9 @@ def evaluate_filtered(model, h, g, data_loader, fold, head, dev='cpu'):
             # if no more lists break
             if edge_idx is None:
                 break
-            scores = model.evaluate(h.to(dev), g.to(dev), edge_idx, edge_type)
+            scores = model.evaluate(edge_idx.to(dev), edge_type.to(dev))
             rank = rank_triplet(scores, position)
             ranks.append(rank)
-
             torch.cuda.empty_cache()
 
             # remove it when runnig experiments, only for debug
@@ -153,5 +119,4 @@ def evaluate_filtered(model, h, g, data_loader, fold, head, dev='cpu'):
             print("List %.d" % counter + ' rank: %.d' % rank.item())
         triplets_file.close()
         torch.cuda.empty_cache()
-        ranks = np.array(ranks)
         return ranks

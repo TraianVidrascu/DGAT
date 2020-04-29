@@ -169,47 +169,34 @@ class Dataset:
         else:
             other_fold = 'valid'
 
-        _, _, graph_other = self.load_fold(other_fold, 'cpu')
-        other_idx, other_type = DataLoader.graph2idx(graph_other)
-
-        _, _, graph_train = self.load_fold('train', 'cpu')
-        train_idx, train_type = DataLoader.graph2idx(graph_train)
-
         prefix = 'head_' if head else 'tail_'
         triplets_file_path = self.eval_dir + prefix + fold + '_triplets_filtered.txt'
         file = open(triplets_file_path, 'w')
 
         no_lists = triplets_raw.shape[0]
-        m = triplets_raw.shape[1]
         correct_axis = int(head)
         corrupt_axis = 1 - correct_axis
 
+        correct_triplets = self.get_valid_triplets()
+        correct_idx = torch.stack([correct_triplets[0, :], correct_triplets[2, :]])
+        correct_type = correct_triplets[1, :]
         for list_idx in range(no_lists):
             # get triplet uncorrupted information
             correct_part = lists_raw[0, list_idx]
             position = lists_raw[1, list_idx]
             triplet_type = lists_raw[2, list_idx]
 
-            # same train set
-            same_part_train = train_idx[correct_axis, :] == correct_part  # same correct part
-            same_type_train = train_type[:] == triplet_type  # same type
-            same_correct_train = same_part_train & same_type_train
-
-            # same other fold
-            same_part_other = other_idx[correct_axis, :] == correct_part  # same correct part
-            same_type_other = other_type[:] == triplet_type  # same type
-            same_correct_other = same_part_other & same_type_other
+            same_correct_part = correct_idx[correct_axis, :] == correct_part  # same correct part
+            same_correct_type = correct_type[:] == triplet_type  # same type
+            same_correct = same_correct_part & same_correct_type
 
             corrupted = triplets_raw[list_idx, :]
             correct_triplet = torch.tensor([correct_part, triplet_type, corrupted[position]])
 
-            same_train = Dataset.find(corrupted, train_idx[corrupt_axis, same_correct_train])[:, 0]
-            corrupted = torch.LongTensor(np.delete(corrupted.data.numpy(), same_train))
+            same = Dataset.find(corrupted, correct_idx[corrupt_axis, same_correct])[:, 0]
+            corrupted = torch.LongTensor(np.delete(corrupted.data.numpy(), same))
 
-            same_other = Dataset.find(corrupted, other_idx[corrupt_axis, same_correct_other])[:, 0]
-            corrupted = torch.LongTensor(np.delete(corrupted.data.numpy(), same_other))
-
-            string_list = BEGINLIST + '\n' + str(correct_triplet.tolist()) + '\n' + str(corrupted.tolist()) + '\n'
+            string_list = BEGINLIST + '\n' + str(correct_triplet.tolist()) + '\n' + str(corrupted[1:].tolist()) + '\n'
             file.write(string_list)
             print(prefix + fold + ' Finished list: %.d' % list_idx)
             file.write(ENDLIST + '\n')
@@ -240,7 +227,9 @@ class Dataset:
             triplet_idx = edge_idx[:, i]
             # triplets edge index and valid tripler coordinate
             triplets, position = DataLoader.corrupt_triplet(n, triplet_idx, head=head)
-
+            aux = triplets[:, 0].clone()
+            triplets[:, 0] = triplets[:, position].clone()
+            triplets[:, position] = aux
             # corrupted triples
             if head:
                 corrupted = triplets[0, :]
@@ -251,7 +240,7 @@ class Dataset:
 
             # triplets type, valid position and uncorrupted part
             lists_info[0, i] = original
-            lists_info[1, i] = position
+            lists_info[1, i] = 0
             lists_info[2, i] = edge_type[i]
 
             # append list to all lists

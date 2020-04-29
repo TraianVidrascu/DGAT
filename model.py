@@ -9,7 +9,7 @@ class RelationalAttentionLayer(nn.Module):
                  negative_slope=2e-1, dropout=0.3, device='cpu'):
         super(RelationalAttentionLayer, self).__init__()
         # forward layers
-        self.fc1 = nn.Linear(2 * in_size_h + in_size_g, heads * out_size, bias=bias)
+        self.fc1 = nn.Linear(2 * in_size_h + in_size_g, heads * out_size, bias=False)
 
         # attention layers
         self.weights_att = nn.Parameter(torch.Tensor(1, heads, out_size))
@@ -71,7 +71,7 @@ class RelationalAttentionLayer(nn.Module):
 
     def _attention(self, c_ijk, end_nodes):
         a_ijk = torch.sum(self.weights_att * c_ijk, dim=2)[:, :, None]
-        b_ijk = -self.leaky_relu(a_ijk)  # see if let negative
+        b_ijk = -self.leaky_relu(a_ijk)
 
         alpha = RelationalAttentionLayer._sofmax(end_nodes, b_ijk)
         alpha = self.dropout(alpha)
@@ -116,7 +116,7 @@ class EntityLayer(nn.Module):
     def __init__(self, initial_size, layer_size, device='cpu'):
         super(EntityLayer, self).__init__()
         # entity embedding
-        self.weights_ent = nn.Linear(initial_size, layer_size)
+        self.weights_ent = nn.Linear(initial_size, layer_size, bias=False)
         self.init_params()
         self.to(device)
 
@@ -194,10 +194,10 @@ class KB(nn.Module):
         loss = self.loss_fct(d_pos, d_neg, y)
         return loss
 
-    def evaluate(self, h, g, triplets, triplets_type):
+    def evaluate(self, triplets, triplets_type):
         with torch.no_grad():
             self.eval()
-            scores = torch.detach(KB._dissimilarity(h, g, triplets, triplets_type).cpu()).numpy()
+            scores = torch.detach(KB._dissimilarity(self.x_initial, self.g_initial, triplets, triplets_type).cpu())
         return scores
 
 
@@ -207,17 +207,23 @@ class DKBATNet(KB):
                  device='cpu'):
         super(DKBATNet, self).__init__(x, g, device)
         self.inbound_input_layer = RelationalAttentionLayer(self.x_size, self.g_size, hidden_size, heads,
+                                                            negative_slope=negative_slope,
                                                             dropout=dropout,
                                                             device=device)
         self.outbound_input_layer = RelationalAttentionLayer(self.x_size, self.g_size, hidden_size, heads,
+                                                             negative_slope=negative_slope,
                                                              dropout=dropout,
                                                              device=device)
-        self.alpha_input = AlphaLayer(hidden_size, device)
+        self.alpha_input = AlphaLayer(hidden_size * heads, device)
 
-        self.inbound_output_layer = RelationalAttentionLayer(hidden_size * heads, self.g_size, output_size, heads,
+        self.inbound_output_layer = RelationalAttentionLayer(hidden_size * heads, hidden_size * heads,
+                                                             hidden_size * heads, 1,
+                                                             negative_slope=negative_slope,
                                                              dropout=dropout,
                                                              device=device)
-        self.outbound_output_layer = RelationalAttentionLayer(hidden_size * heads, self.g_size, output_size, heads,
+        self.outbound_output_layer = RelationalAttentionLayer(hidden_size * heads, hidden_size * heads,
+                                                              hidden_size * heads, 1,
+                                                              negative_slope=negative_slope,
                                                               dropout=dropout,
                                                               device=device)
 
@@ -241,33 +247,30 @@ class DKBATNet(KB):
 
         row, col = edge_idx
         rel = edge_type
-        h_ijk = torch.cat([self.x_initial[row], self.x_initial[col], self.g_initial[rel]], dim=1)
 
+        # compute h_ijk
+        h_ijk = torch.cat([self.x_initial[row], self.x_initial[col], self.g_initial[rel]], dim=1)
         h_inbound = self.inbound_input_layer(h_ijk, col, self.n)
         h_outbound = self.outbound_input_layer(h_ijk, row, self.n)
 
         alpha = self.alpha_input(h_inbound, h_outbound)
-
         h = alpha * h_inbound + (1 - alpha) * h_outbound
-        h = self.actv(h)
-        h = F.normalize(h, p=2, dim=2)
-        h = self._concat(h)
+        h = self.dropout(h)
 
-        h_ijk = torch.cat([h[row], h[col], self.g_initial[rel]], dim=1)
+        # compute relation embedding
+        g_prime = self.relation_layer(self.g_initial)
 
+        # copute h_ijk
+        h_ijk = torch.cat([h[row], h[col], g_prime[rel]], dim=1)
         h_inbound = self.inbound_output_layer(h_ijk, col, self.n)
         h_outbound = self.outbound_output_layer(h_ijk, row, self.n)
 
-        alpha = self.alpha_output(h_inbound, h_outbound)
+        alpha = self.alpha(h_inbound, h_outbound)
         h = alpha * h_inbound + (1 - alpha) * h_outbound
-        h = self.actv(h)
-        h = F.normalize(h, p=2, dim=2)
 
         h_prime = self.entity_layer(self.x_initial, h)
-        h_prime = F.normalize(h_prime, p=2, dim=2)
-        h_prime = self._concat(h_prime)
 
-        g_prime = self.relation_layer(g)
+        h_prime = F.normalize(h_prime, p=2, dim=1)
 
         return h_prime, g_prime
 
@@ -277,10 +280,12 @@ class KBNet(KB):
                  device='cpu'):
         super(KBNet, self).__init__(x, g, device)
         self.input_attention_layer = RelationalAttentionLayer(self.x_size, self.g_size, output_size, heads,
+                                                              negative_slope=negative_slope,
                                                               dropout=dropout,
                                                               device=device)
         self.output_attention_layer = RelationalAttentionLayer(output_size * heads, output_size * heads,
                                                                output_size * heads, 1, dropout=dropout,
+                                                               negative_slope=negative_slope,
                                                                device=device, concat=False)
 
         self.entity_layer = EntityLayer(self.x_size, heads * output_size, device=device)
@@ -305,7 +310,7 @@ class KBNet(KB):
         h_ijk = torch.cat([self.x_initial[row], self.x_initial[col], self.g_initial[rel]], dim=1)
 
         # compute embedding
-        h = self.input_attention_layer(h_ijk, col, self.n)
+        h = self.input_attention_layer(h_ijk, edge_idx, self.n)
 
         h = self.dropout(h)
 
@@ -313,7 +318,7 @@ class KBNet(KB):
 
         # computer edge representation for second layer
         h_ijk = torch.cat([h[row], h[col], g_prime[rel]], dim=1)
-        h = self.output_attention_layer(h_ijk, col, self.n).squeeze()
+        h = self.output_attention_layer(h_ijk, edge_idx, self.n).squeeze()
 
         # add initial embeddings to last layer
         h_prime = self.entity_layer(self.x_initial, h)
@@ -341,18 +346,15 @@ class WrapperConvKB(nn.Module):
     def forward(self, edge_idx, edge_type):
         row, col = edge_idx
 
-        h_ijk = torch.stack([self.node_embeddings[row], self.node_embeddings[col], self.rel_embeddings[edge_type]],
+        h_ijk = torch.stack([self.node_embeddings[row], self.rel_embeddings[edge_type], self.node_embeddings[col]],
                             dim=1).to(self.dev)
 
         preds = self.conv(h_ijk)
         return preds
 
-    def evaluate(self, _, __, edge_idx, edge_type):
+    def evaluate(self, edge_idx, edge_type):
         with torch.no_grad():
-            row, col = edge_idx
-            h_ijk = torch.stack([self.node_embeddings[row], self.node_embeddings[col], self.rel_embeddings[edge_type]],
-                                dim=1).to(self.dev)
-            scores = torch.detach(self.conv(h_ijk).view(-1).cpu()).numpy()
+            scores = torch.detach(self.forward(edge_idx, edge_type).view(-1).cpu())
         return scores
 
 
@@ -386,12 +388,3 @@ class ConvKB(nn.Module):
         input_fc = out_conv.squeeze(-1).view(batch_size, -1)
         output = self.fc_layer(input_fc)
         return output
-
-    def evaluate(self, h, g, edge_idx, batch_type):
-        with torch.no_grad():
-            self.eval()
-            row, col = edge_idx
-            conv_input = torch.stack([h[row], g[batch_type], h[col]], dim=1).to(self.dev)
-
-            scores = torch.detach(self(conv_input).view(-1).cpu()).numpy()
-        return scores

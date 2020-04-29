@@ -1,7 +1,9 @@
 import argparse
 
 import torch
+import torch.nn as nn
 import wandb
+from torch.autograd import Variable
 
 from data.dataset import FB15, WN18, KINSHIP
 from metrics import get_model_metrics
@@ -39,16 +41,7 @@ def train_decoder(args, decoder, data_loader, h, g):
     m = train_pos_idx.shape[1]
     n = h.shape[0]
 
-    # validation set
-    # _, _, graph_valid = data_loader.load('valid')
-    # valid_idx, valid_type = data_loader.graph2idx(graph_valid, 'cpu')
-    # valid_head_invalid_sampling, valid_tail_invalid_sampling = data_loader.load_invalid_sampling('valid')
-    # _, valid_neg_idx, valid_neg_type = data_loader.negative_samples(n, valid_idx, valid_type, negative_ratio,
-    #                                                                 valid_head_invalid_sampling,
-    #                                                                 valid_tail_invalid_sampling,
-    #                                                                 'cpu')
-
-    criterion = torch.nn.SoftMarginLoss()
+    criterion = nn.SoftMarginLoss()
     for epoch in range(first, epochs):
         decoder.train()
 
@@ -81,9 +74,9 @@ def train_decoder(args, decoder, data_loader, h, g):
             no_pos = batch_pos_idx.shape[1]
             no_neg = batch_neg_idx.shape[1]
 
-            target_batch = torch.cat([torch.ones(no_pos), -torch.ones(no_neg)])
-            batch_idx = torch.cat([batch_pos_idx, batch_neg_idx], dim=1)
-            batch_type = torch.cat([batch_pos_type, batch_neg_type])
+            target_batch = Variable(torch.cat([torch.ones(no_pos), -torch.ones(no_neg)]))
+            batch_idx = Variable(torch.cat([batch_pos_idx, batch_neg_idx], dim=1))
+            batch_type = Variable(torch.cat([batch_pos_type, batch_neg_type]))
 
             # forward input
             prediction = decoder(batch_idx, batch_type)
@@ -105,13 +98,14 @@ def train_decoder(args, decoder, data_loader, h, g):
         scheduler.step()
 
         loss_epoch = sum(losses) / len(losses)
+        print('\nEpoch:{0} Average Loss:{1:.6f}\n'.format(epoch + 1, loss_epoch))
         save_best_decoder(decoder, loss_epoch, epoch + 1, decoder_file, args, asc=False)
 
         if (epoch + 1) % eval == 0:
             decoder_epoch_file = DECODER_NAME + '_' + model.lower() + '_' + dataset_name.lower() + '_' + str(
                 epoch + 1) + '.pt'
             save_model(decoder, loss_epoch, epoch + 1, decoder_epoch_file, args)
-            metrics = get_model_metrics(data_loader, h, g, 'valid', decoder, DECODER, dev)
+            metrics = get_model_metrics(data_loader, 'valid', decoder, DECODER, dev)
             metrics['train_' + dataset_name + '_Loss_decoder'] = loss_epoch
             wandb.log(metrics)
         else:
@@ -126,7 +120,7 @@ def main():
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval", type=int, default=25, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
+    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=400, help="Number of training epochs for decoder.")
