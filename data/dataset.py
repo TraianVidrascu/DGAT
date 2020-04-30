@@ -153,7 +153,6 @@ class Dataset:
         g, rel_mapper = self.read_relations()
         self.read_edges(node_mapper, rel_mapper)
         # self.save_paths(2)
-        self.save_triplets_raw()
         self.filter_evaluation_folds()
         valid_triples = self.get_valid_triplets()
         self.save_invalid_sampling(valid_triples)
@@ -163,17 +162,15 @@ class Dataset:
         return torch.nonzero(tensor[..., None] == values)
 
     def filter_evaluation_triplets(self, fold, head=True):
-        triplets_raw, lists_raw = self.load_evaluation_triplets_raw(fold, head)
-        if fold == 'valid':
-            other_fold = 'test'
-        else:
-            other_fold = 'valid'
+        x, _, graph = self.load_fold(fold, 'cpu')
+        n = x.shape[0]
+        edge_idx, edge_type = DataLoader.graph2idx(graph)
 
         prefix = 'head_' if head else 'tail_'
         triplets_file_path = self.eval_dir + prefix + fold + '_triplets_filtered.txt'
         file = open(triplets_file_path, 'w')
 
-        no_lists = triplets_raw.shape[0]
+        no_lists = edge_idx.shape[1]
         correct_axis = int(head)
         corrupt_axis = 1 - correct_axis
 
@@ -181,20 +178,21 @@ class Dataset:
         correct_idx = torch.stack([correct_triplets[0, :], correct_triplets[2, :]])
         correct_type = correct_triplets[1, :]
         for list_idx in range(no_lists):
-            # get triplet uncorrupted information
-            correct_part = lists_raw[0, list_idx]
-            position = lists_raw[1, list_idx]
-            triplet_type = lists_raw[2, list_idx]
+            correct_part = edge_idx[correct_axis, list_idx]
+            triplet_type = edge_type[list_idx]
 
+            # get existing edges with same type and correct end
             same_correct_part = correct_idx[correct_axis, :] == correct_part  # same correct part
             same_correct_type = correct_type[:] == triplet_type  # same type
             same_correct = same_correct_part & same_correct_type
 
-            corrupted = triplets_raw[list_idx, :]
-            correct_triplet = torch.tensor([correct_part, triplet_type, corrupted[position]])
-
+            # generate corrupted and filter existing tuples
+            corrupted = torch.randperm(n)
             same = Dataset.find(corrupted, correct_idx[corrupt_axis, same_correct])[:, 0]
             corrupted = torch.LongTensor(np.delete(corrupted.data.numpy(), same))
+
+            # get correct triplet
+            correct_triplet = torch.tensor([correct_part, triplet_type, edge_idx[corrupt_axis, list_idx]])
 
             string_list = BEGINLIST + '\n' + str(correct_triplet.tolist()) + '\n' + str(corrupted[1:].tolist()) + '\n'
             file.write(string_list)

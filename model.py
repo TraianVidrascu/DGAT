@@ -194,11 +194,11 @@ class KB(nn.Module):
         loss = self.loss_fct(d_pos, d_neg, y)
         return loss
 
-    def evaluate(self, triplets, triplets_type):
+    def evaluate(self, h, g, eval_idx, eval_type):
         with torch.no_grad():
             self.eval()
-            scores = torch.detach(KB._dissimilarity(self.x_initial, self.g_initial, triplets, triplets_type).cpu())
-        return scores
+            scores = torch.detach(KB._dissimilarity(h, g, eval_idx, eval_type).cpu())
+            return scores
 
 
 class DKBATNet(KB):
@@ -249,7 +249,7 @@ class DKBATNet(KB):
         rel = edge_type
 
         # compute h_ijk
-        h_ijk = torch.cat([self.x_initial[row], self.x_initial[col], self.g_initial[rel]], dim=1)
+        h_ijk = torch.cat([self.x_initial[row, :], self.x_initial[col, :], self.g_initial[rel, : ]], dim=1)
         h_inbound = self.inbound_input_layer(h_ijk, col, self.n)
         h_outbound = self.outbound_input_layer(h_ijk, row, self.n)
 
@@ -261,7 +261,7 @@ class DKBATNet(KB):
         g_prime = self.relation_layer(self.g_initial)
 
         # copute h_ijk
-        h_ijk = torch.cat([h[row], h[col], g_prime[rel]], dim=1)
+        h_ijk = torch.cat([h[row, :], h[col, :], g_prime[rel, :]], dim=1)
         h_inbound = self.inbound_output_layer(h_ijk, col, self.n)
         h_outbound = self.outbound_output_layer(h_ijk, row, self.n)
 
@@ -307,18 +307,18 @@ class KBNet(KB):
         row, col = edge_idx
         rel = edge_type
         # edge representation
-        h_ijk = torch.cat([self.x_initial[row], self.x_initial[col], self.g_initial[rel]], dim=1)
+        h_ijk = torch.cat([self.x_initial[row,:], self.x_initial[col,:], self.g_initial[rel,:]], dim=1)
 
         # compute embedding
-        h = self.input_attention_layer(h_ijk, edge_idx, self.n)
+        h = self.input_attention_layer(h_ijk, col, self.n)
 
         h = self.dropout(h)
 
         g_prime = self.relation_layer(self.g_initial)
 
         # computer edge representation for second layer
-        h_ijk = torch.cat([h[row], h[col], g_prime[rel]], dim=1)
-        h = self.output_attention_layer(h_ijk, edge_idx, self.n).squeeze()
+        h_ijk = torch.cat([h[row, :], h[col, :], g_prime[rel, :]], dim=1)
+        h = self.output_attention_layer(h_ijk, col, self.n).squeeze()
 
         # add initial embeddings to last layer
         h_prime = self.entity_layer(self.x_initial, h)
@@ -334,11 +334,8 @@ class WrapperConvKB(nn.Module):
         super(WrapperConvKB, self).__init__()
         self.conv = ConvKB(input_dim, input_seq_len, in_channels, out_channels, drop_prob, dev)
 
-        self.node_embeddings = nn.Parameter(torch.rand(size=h.shape), requires_grad=True)
-        self.rel_embeddings = nn.Parameter(torch.rand(size=g.shape), requires_grad=False)
-
-        self.node_embeddings.data = h
-        self.rel_embeddings.data = g
+        self.node_embeddings = nn.Parameter(h, requires_grad=True)
+        self.rel_embeddings = nn.Parameter(g, requires_grad=True)
 
         self.dev = dev
         self.to(dev)
@@ -346,13 +343,14 @@ class WrapperConvKB(nn.Module):
     def forward(self, edge_idx, edge_type):
         row, col = edge_idx
 
-        h_ijk = torch.stack([self.node_embeddings[row], self.rel_embeddings[edge_type], self.node_embeddings[col]],
-                            dim=1).to(self.dev)
+        h_ijk = torch.stack(
+            [self.node_embeddings[row, :], self.rel_embeddings[edge_type, :], self.node_embeddings[col, :]],
+            dim=1).to(self.dev)
 
         preds = self.conv(h_ijk)
         return preds
 
-    def evaluate(self, edge_idx, edge_type):
+    def evaluate(self, _, __, edge_idx, edge_type):
         with torch.no_grad():
             scores = torch.detach(self.forward(edge_idx, edge_type).view(-1).cpu())
         return scores

@@ -105,7 +105,7 @@ def train_decoder(args, decoder, data_loader, h, g):
             decoder_epoch_file = DECODER_NAME + '_' + model.lower() + '_' + dataset_name.lower() + '_' + str(
                 epoch + 1) + '.pt'
             save_model(decoder, loss_epoch, epoch + 1, decoder_epoch_file, args)
-            metrics = get_model_metrics(data_loader, 'valid', decoder, DECODER, dev)
+            metrics = get_model_metrics(data_loader,decoder.node_embeddings,decoder.rel_embeddings, 'test', decoder, DECODER, dev)
             metrics['train_' + dataset_name + '_Loss_decoder'] = loss_epoch
             wandb.log(metrics)
         else:
@@ -120,7 +120,7 @@ def main():
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval", type=int, default=25, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
+    parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=400, help="Number of training epochs for decoder.")

@@ -55,9 +55,9 @@ def get_ranking_metric(ranking_name, ranking, model_name, dataset_name, fold):
     return metrics
 
 
-def get_model_metrics(data_loader, fold, model, model_name, dev='cpu'):
-    ranks_head = evaluate_filtered(model, data_loader, fold, True, dev)
-    ranks_tail = evaluate_filtered(model, data_loader, fold, False, dev)
+def get_model_metrics(data_loader, h, g, fold, model, model_name, dev='cpu'):
+    ranks_head = evaluate_filtered(model, h, g, data_loader, fold, True, dev)
+    ranks_tail = evaluate_filtered(model, h, g, data_loader, fold, False, dev)
     ranks = np.concatenate((ranks_head, ranks_tail))
 
     dataset_name = data_loader.get_name()
@@ -70,8 +70,8 @@ def get_model_metrics(data_loader, fold, model, model_name, dev='cpu'):
     return metrics
 
 
-def get_model_metrics_head_or_tail(data_loader, fold, model, model_name, head, dev='cpu'):
-    ranks = evaluate_filtered(model, data_loader, fold, head, dev)
+def get_model_metrics_head_or_tail(data_loader, h, g, fold, model, model_name, head, dev='cpu'):
+    ranks = evaluate_filtered(model, h, g, data_loader, fold, head, dev)
 
     dataset_name = data_loader.get_name()
     part = 'head' if head else 'tail'
@@ -96,20 +96,22 @@ def evaluate_list(model, h, g, corrupted, list_info, head):
     return rank
 
 
-def evaluate_filtered(model, data_loader, fold, head, dev='cpu'):
+def evaluate_filtered(model, h, g, data_loader, fold, head, dev='cpu'):
     with torch.no_grad():
+        # load structural information
+
         # load corrupted head triplets
 
         triplets_file = data_loader.get_filtered_eval_file(fold, head)
         ranks = []
         counter = 0
         while True:
-            edge_idx, edge_type, position = DataLoader.load_list(triplets_file, head, dev)
+            eval_idx, eval_type, position = DataLoader.load_list(triplets_file, head, dev)
 
             # if no more lists break
-            if edge_idx is None:
+            if eval_idx is None:
                 break
-            scores = model.evaluate(edge_idx.to(dev), edge_type.to(dev))
+            scores = model.evaluate(h, g, eval_idx.to(dev), eval_type.to(dev))
             rank = rank_triplet(scores, position)
             ranks.append(rank)
             torch.cuda.empty_cache()

@@ -25,7 +25,13 @@ def get_embeddings(data_loader, dev, encoder):
 
 
 def evaluate_encoder(data_loader, fold, encoder, embedding_model, head, dev='cpu'):
-    metrics = get_model_metrics_head_or_tail(data_loader, fold, encoder, 'encoder', head, dev=dev)
+    _, _, graph = data_loader.load_train()
+    edge_idx, edge_type = data_loader.graph2idx(graph, dev)
+
+    with torch.no_grad():
+        encoder.eval()
+        h, g = encoder(edge_idx, edge_type)
+    metrics = get_model_metrics_head_or_tail(data_loader, h, g, fold, encoder, 'encoder', head, dev=dev)
     print(embedding_model + data_loader.get_name() + ' ' + fold + ' metrics:')
     print(metrics)
     wandb.log(metrics)
@@ -47,7 +53,7 @@ def save_embedding(data_loader, encoder, embedding_model, dev='cpu'):
 
 def evaluate_embeddings(data_loader, fold, h, g, head, dev):
     encoder = KB(h, g)
-    metrics = get_model_metrics_head_or_tail(data_loader, fold, encoder, 'encoder', head, dev=dev)
+    metrics = get_model_metrics_head_or_tail(data_loader, h, g, fold, encoder, 'encoder', head, dev=dev)
     print(metrics)
 
 
@@ -77,7 +83,7 @@ def evaluate_decoder(data_loader, fold, model_name, head, dev='cpu'):
 
     decoder, _, _ = load_decoder_eval(model_name, data_loader, h, g)
 
-    metrics = get_model_metrics_head_or_tail(data_loader, h, g, fold, decoder, 'decoder', head, dev=dev)
+    metrics = get_model_metrics_head_or_tail(data_loader, decoder.node_embeddings, decoder.rel_embeddings, fold, decoder, 'decoder', head, dev=dev)
     print(model_name + '_ConvKB ' + data_loader.get_name() + ' ' + fold + ' metrics:')
     print(metrics)
     wandb.log(metrics)
@@ -92,7 +98,7 @@ def main_encoder():
     parser.add_argument("--fold", type=str, default='test', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
-    parser.add_argument("--save", type=int, default=1, help="Save node embedding.")
+    parser.add_argument("--save", type=int, default=0, help="Save node embedding.")
     parser.add_argument("--eval", type=int, default=1, help="Evaluate encoder.")
     parser.add_argument("--device", type=str, default='cuda', help="Device to run model.")
 
@@ -128,7 +134,7 @@ def main_decoder():
     parser.add_argument("--model", type=str, default=KBAT, help='Model name')
 
     # evaluation parameters
-    parser.add_argument("--dataset", type=str, default=WN18, help="Dataset used for evaluation.")
+    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for evaluation.")
     parser.add_argument("--fold", type=str, default='test', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
@@ -148,4 +154,4 @@ def main_decoder():
 
 
 if __name__ == '__main__':
-    run_embeddings()
+    main_encoder()

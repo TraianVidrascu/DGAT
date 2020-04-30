@@ -158,7 +158,7 @@ def train_encoder(args, model, data_loader):
             encoder_epoch_file = ENCODER + '_' + args.model.lower() + '_' + dataset_name.lower() + '_' + str(
                 epoch) + '.pt'
             save_model(model, loss_epoch, epoch + 1, encoder_epoch_file, args)
-            metrics = get_model_metrics(data_loader, h_prime, g_prime, 'valid', model, ENCODER, dev=args.device)
+            metrics = get_model_metrics(data_loader, h_prime, g_prime, 'test', model, ENCODER, dev=args.device)
             metrics['train_' + dataset_name + '_Loss_encoder'] = loss_epoch
             metrics['valid_' + dataset_name + '_Loss_encoder'] = valid_loss
             wandb.log(metrics)
@@ -204,7 +204,7 @@ def main():
     parser.add_argument("--dropout", type=float, default=0.3, help="out for training.")
     parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for training.")
     parser.add_argument("--batch", type=int, default=8544, help="Batch size.")
-    parser.add_argument("--negative_ratio", type=int, default=2, help="Number of negative edges per positive one.")
+    parser.add_argument("--negative_ratio", type=int, default=6, help="Number of negative edges per positive one.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
