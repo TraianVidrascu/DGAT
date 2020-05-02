@@ -203,7 +203,7 @@ def main():
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="out for training.")
     parser.add_argument("--dataset", type=str, default=FB15, help="Dataset used for training.")
-    parser.add_argument("--batch", type=int, default=271225, help="Batch size.")
+    parser.add_argument("--batch", type=int, default=272115, help="Batch size.")
     parser.add_argument("--negative_ratio", type=int, default=2, help="Number of negative edges per positive one.")
 
     # objective function parameters
