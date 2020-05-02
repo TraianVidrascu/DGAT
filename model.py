@@ -162,7 +162,7 @@ class AlphaLayer(nn.Module):
         nn.init.xavier_normal_(self.alpha.weight, gain=1.414)
 
     def forward(self, h_inbound, h_outbound):
-        h_all = torch.cat([h_inbound, h_outbound], dim=2)
+        h_all = torch.cat([h_inbound, h_outbound], dim=-1)
         alpha = self.alpha(h_all)
         alpha = self.actv(alpha)
         return alpha
@@ -183,7 +183,7 @@ class KB(nn.Module):
     @staticmethod
     def _dissimilarity(h, g, edge_idx, edge_type):
         row, col = edge_idx
-        d_norm = torch.norm(h[row] + g[edge_type] - h[col], p=1, dim=1)
+        d_norm = torch.norm(h[row, :] + g[edge_type, :] - h[col, :], p=1, dim=1)
         return d_norm
 
     def loss(self, h_prime, g_prime, pos_edge_idx, pos_edge_type, neg_edge_idx, neg_edge_type):
@@ -202,41 +202,42 @@ class KB(nn.Module):
 
 
 class DKBATNet(KB):
-    def __init__(self, x, g, hidden_size, output_size, heads, margin=1, dropout=0.3,
+    def __init__(self, x, g, output_size, heads, margin=1, dropout=0.3,
                  negative_slope=0.2,
                  device='cpu'):
         super(DKBATNet, self).__init__(x, g, device)
-        self.inbound_input_layer = RelationalAttentionLayer(self.x_size, self.g_size, hidden_size, heads,
+        self.inbound_input_layer = RelationalAttentionLayer(self.x_size, self.g_size, output_size, heads,
                                                             negative_slope=negative_slope,
                                                             dropout=dropout,
                                                             device=device)
-        self.outbound_input_layer = RelationalAttentionLayer(self.x_size, self.g_size, hidden_size, heads,
+        self.outbound_input_layer = RelationalAttentionLayer(self.x_size, self.g_size, output_size, heads,
                                                              negative_slope=negative_slope,
                                                              dropout=dropout,
                                                              device=device)
-        self.alpha_input = AlphaLayer(hidden_size * heads, device)
+        self.alpha_input = AlphaLayer(output_size * heads, device)
 
-        self.inbound_output_layer = RelationalAttentionLayer(hidden_size * heads, hidden_size * heads,
-                                                             hidden_size * heads, 1,
+        self.inbound_output_layer = RelationalAttentionLayer(output_size * heads, output_size * heads,
+                                                             output_size * heads, 1,
                                                              negative_slope=negative_slope,
                                                              dropout=dropout,
                                                              device=device)
-        self.outbound_output_layer = RelationalAttentionLayer(hidden_size * heads, hidden_size * heads,
-                                                              hidden_size * heads, 1,
+        self.outbound_output_layer = RelationalAttentionLayer(output_size * heads, output_size * heads,
+                                                              output_size * heads, 1,
                                                               negative_slope=negative_slope,
                                                               dropout=dropout,
                                                               device=device)
 
-        self.alpha_output = AlphaLayer(output_size, device)
+        self.alpha_output = AlphaLayer(output_size * heads, device)
 
-        self.entity_layer = EntityLayer(self.x_size, heads, output_size, device=device)
+        self.entity_layer = EntityLayer(self.x_size, heads * output_size, device=device)
         self.relation_layer = RelationLayer(self.g_size, output_size * heads, device=device)
+
+        self.dropout = nn.Dropout(dropout)
 
         self.loss_fct = nn.MarginRankingLoss(margin=margin)
 
         self.heads = heads
         self.output_size = output_size
-        self.hidden_size = hidden_size
 
         self.to(device)
 
@@ -249,7 +250,7 @@ class DKBATNet(KB):
         rel = edge_type
 
         # compute h_ijk
-        h_ijk = torch.cat([self.x_initial[row, :], self.x_initial[col, :], self.g_initial[rel, : ]], dim=1)
+        h_ijk = torch.cat([self.x_initial[row, :], self.x_initial[col, :], self.g_initial[rel, :]], dim=1)
         h_inbound = self.inbound_input_layer(h_ijk, col, self.n)
         h_outbound = self.outbound_input_layer(h_ijk, row, self.n)
 
@@ -265,7 +266,7 @@ class DKBATNet(KB):
         h_inbound = self.inbound_output_layer(h_ijk, col, self.n)
         h_outbound = self.outbound_output_layer(h_ijk, row, self.n)
 
-        alpha = self.alpha(h_inbound, h_outbound)
+        alpha = self.alpha_output(h_inbound, h_outbound)
         h = alpha * h_inbound + (1 - alpha) * h_outbound
 
         h_prime = self.entity_layer(self.x_initial, h)
@@ -307,7 +308,7 @@ class KBNet(KB):
         row, col = edge_idx
         rel = edge_type
         # edge representation
-        h_ijk = torch.cat([self.x_initial[row,:], self.x_initial[col,:], self.g_initial[rel,:]], dim=1)
+        h_ijk = torch.cat([self.x_initial[row, :], self.x_initial[col, :], self.g_initial[rel, :]], dim=1)
 
         # compute embedding
         h = self.input_attention_layer(h_ijk, col, self.n)
