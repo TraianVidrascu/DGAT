@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-task=3
 #SBATCH --time=14:00:00
 #SBATCH --mem=60000M
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:1
 #SBATCH --partition=gpu_shared
 #SBATCH --mail-type=BEGIN,END
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
