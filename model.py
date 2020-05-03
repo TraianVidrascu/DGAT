@@ -339,6 +339,7 @@ class WrapperConvKB(nn.Module):
         self.rel_embeddings = nn.Parameter(g, requires_grad=True)
 
         self.dev = dev
+        self.out_channels = out_channels
         self.to(dev)
 
     def forward(self, edge_idx, edge_type):
@@ -353,7 +354,19 @@ class WrapperConvKB(nn.Module):
 
     def evaluate(self, _, __, edge_idx, edge_type):
         with torch.no_grad():
-            scores = torch.detach(self.forward(edge_idx, edge_type).view(-1).cpu())
+            self.eval()
+            n = edge_idx.shape[1]
+
+            if n > 15000:
+                step = n // 4
+                scores = []
+                for i in range(0, n, step):
+                    batch_idx, batch_type = edge_idx[:, i:i + step], edge_type[i:i + step]
+                    preds = torch.detach(self.forward(batch_idx, batch_type).view(-1).cpu())
+                    scores.append(preds)
+                scores = torch.cat(scores)
+            else:
+                scores = torch.detach(self.forward(edge_idx, edge_type).view(-1).cpu())
         return scores
 
 
