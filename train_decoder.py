@@ -1,4 +1,5 @@
 import argparse
+import time
 
 import torch
 import torch.nn as nn
@@ -8,7 +9,7 @@ from torch.autograd import Variable
 from data.dataset import FB15, WN18, KINSHIP
 from metrics import get_model_metrics
 from utilis import save_best_decoder, set_random_seed, load_embedding, save_embeddings, \
-    DECODER, EMBEDDING_DIR, KBAT, get_decoder, DECODER_NAME, get_data_loader, save_model
+    DECODER, EMBEDDING_DIR, KBAT, get_decoder, DECODER_NAME, get_data_loader, save_model, DKBAT
 
 
 def train_decoder(args, decoder, data_loader, h, g):
@@ -54,7 +55,9 @@ def train_decoder(args, decoder, data_loader, h, g):
 
         losses = []
         batch_counter = 0
+        s_epoch = time.time()
         for itt in range(0, m, batch_size):
+            s_batch = time.time()
             # get batch boundaries
             start = itt
             end = itt + batch_size
@@ -64,12 +67,13 @@ def train_decoder(args, decoder, data_loader, h, g):
             batch_invalid_head_sampling = train_head_invalid_sampling[start:end]
             batch_tail_invalid_sampling = train_tail_invalid_sampling[start:end]
 
+            s_sampling = time.time()
             # generate invalid batch triplets
             _, batch_neg_idx, batch_neg_type = data_loader.negative_samples(n, batch_pos_idx, batch_pos_type,
                                                                             negative_ratio, batch_invalid_head_sampling,
                                                                             batch_tail_invalid_sampling,
                                                                             'cpu')
-
+            t_sampling = time.time()
             # combine positive and negative batch
             no_pos = batch_pos_idx.shape[1]
             no_neg = batch_neg_idx.shape[1]
@@ -79,7 +83,9 @@ def train_decoder(args, decoder, data_loader, h, g):
             batch_type = Variable(torch.cat([batch_pos_type, batch_neg_type]))
 
             # forward input
+            s_pred = time.time()
             prediction = decoder(batch_idx, batch_type)
+            t_pred = time.time()
 
             # compute loss
             loss = criterion(prediction.squeeze(-1), target_batch.to(dev))
@@ -90,22 +96,29 @@ def train_decoder(args, decoder, data_loader, h, g):
             optim.step()
             losses.append(loss.item())
             batch_counter += 1
+            t_batch = time.time()
             print('Epoch:%3.d ' % epoch +
                   'Iteration:%3.d ' % batch_counter +
-                  'Loss iteration:%.4f ' % loss.item())
+                  'Loss iteration:%.4f ' % loss.item() +
+                  'Time sampling:%.4f ' % (t_sampling - s_sampling) +
+                  'Time prediction:%.4f ' % (t_pred - s_pred) +
+                  'Time batch:%.4f ' % (t_batch - s_batch))
             del prediction, loss
             torch.cuda.empty_cache()
         scheduler.step()
+        t_epoch = time.time()
 
         loss_epoch = sum(losses) / len(losses)
-        print('\nEpoch:{0} Average Loss:{1:.6f}\n'.format(epoch + 1, loss_epoch))
+        print('\nEpoch:{0} Average Loss:{1:.6f}\n'.format(epoch + 1, loss_epoch) +
+              ' Total time:%.4f' % (t_epoch - s_epoch))
         save_best_decoder(decoder, loss_epoch, epoch + 1, decoder_file, args, asc=False)
 
         if (epoch + 1) % eval == 0:
             decoder_epoch_file = DECODER_NAME + '_' + model.lower() + '_' + dataset_name.lower() + '_' + str(
                 epoch + 1) + '.pt'
             save_model(decoder, loss_epoch, epoch + 1, decoder_epoch_file, args)
-            metrics = get_model_metrics(data_loader,decoder.node_embeddings,decoder.rel_embeddings, 'test', decoder, DECODER, dev)
+            metrics = get_model_metrics(data_loader, decoder.node_embeddings, decoder.rel_embeddings, 'test', decoder,
+                                        DECODER, dev)
             metrics['train_' + dataset_name + '_Loss_decoder'] = loss_epoch
             wandb.log(metrics)
         else:
@@ -119,19 +132,19 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=25, help="After how many epochs to evaluate.")
+    parser.add_argument("--eval", type=int, default=100, help="After how many epochs to evaluate.")
     parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=400, help="Number of training epochs for decoder.")
+    parser.add_argument("--epochs", type=int, default=150, help="Number of training epochs for decoder.")
     parser.add_argument("--step_size", type=int, default=25, help="Step size of scheduler.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay decoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size for decoder.")
-    parser.add_argument("--negative-ratio", type=int, default=10, help="Number of negative samples.")
-    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for training.")
-    parser.add_argument("--model", type=str, default=KBAT, help="Which model's embedding to use.")
+    parser.add_argument("--negative-ratio", type=int, default=40, help="Number of negative samples.")
+    parser.add_argument("--dataset", type=str, default=FB15, help="Dataset used for training.")
+    parser.add_argument("--model", type=str, default=DKBAT, help="Which model's embedding to use.")
     # objective function parameters
 
     # decoder parameters
