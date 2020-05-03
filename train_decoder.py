@@ -121,6 +121,10 @@ def train_decoder(args, decoder, data_loader, h, g):
                                         DECODER, dev)
             metrics['train_' + dataset_name + '_Loss_decoder'] = loss_epoch
             wandb.log(metrics)
+        elif (epoch + 1) % 10 == 0:
+            decoder_epoch_file = DECODER_NAME + '_' + model.lower() + '_' + dataset_name.lower() + '_' + str(
+                epoch + 1) + '.pt'
+            save_model(decoder, loss_epoch, epoch + 1, decoder_epoch_file, args)
         else:
             wandb.log({'train_' + dataset_name + '_Loss_decoder': loss_epoch})
 
