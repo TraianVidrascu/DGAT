@@ -42,17 +42,6 @@ class DataLoader:
         h, g = self.dataset.load_embedding(model_name, dev)
         return h, g
 
-    def load_paths(self):
-        paths = self.dataset.load_paths()
-        row = torch.tensor(paths['x'].values).long()
-        col = torch.tensor(paths['y'].values).long()
-        k_1 = torch.tensor(paths['g_1'].values).long()
-        k_2 = torch.tensor(paths['g_2'].values).long()
-
-        edge_idx = torch.stack([row, col])
-        edge_type = torch.stack([k_1, k_2])
-        return edge_idx, edge_type
-
     @staticmethod
     def graph2idx(graph, dev='cpu'):
         edges = list(map(lambda x: [x[0], x[1], x[2]['label']], graph.edges(data=True)))
@@ -173,3 +162,9 @@ class DataLoader:
     def load_invalid_sampling(self, fold='train'):
         invalid_head_sampling, invalid_tail_sampling = self.dataset.load_invalid_sampling(fold)
         return invalid_head_sampling, invalid_tail_sampling
+
+    def load_paths(self, dev='cpu'):
+        paths = self.dataset.load_paths()
+        path_idx = torch.stack([paths[:, 0], paths[:, 3]]).long().to(dev)
+        path_type = torch.stack([paths[:, 1], paths[:, 2]]).long().to(dev)
+        return path_idx, path_type

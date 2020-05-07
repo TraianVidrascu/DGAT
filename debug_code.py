@@ -49,6 +49,16 @@ def verify_evaluation(data_loader):
 
 
 if __name__ == '__main__':
-    dataset = WN18RR()
+    dataset = Kinship()
     dataset.pre_process()
-
+    # file = './eval_dir/embeddings/trained_3599.pth'
+    # file_h = './eval_dir/embeddings/h_kbat_kinship.pt'
+    # file_g = './eval_dir/embeddings/g_kbat_kinship.pt'
+    # trained = torch.load(file)
+    # h = torch.load(file_h)
+    # g = torch.load(file_g)
+    # trained['final_entity_embeddings'] = h
+    # trained['final_relation_embeddings'] = g
+    #
+    # file = './eval_dir/embeddings/trained_4000.pth'
+    # torch.save(trained,file)

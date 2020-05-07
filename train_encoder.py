@@ -32,8 +32,8 @@ def train_encoder(args, model, data_loader):
     decay = args.decay
     epochs = args.epochs
     step_size = args.step_size
-    batch_size = args.batch
     negative_ratio = args.negative_ratio
+    use_paths = args.use_paths == 1
 
     # encoder save file path
     dataset_name = data_loader.get_name()
@@ -44,7 +44,11 @@ def train_encoder(args, model, data_loader):
     n = x.shape[0]
 
     # load graph base structure
+    path_idx, path_type = torch.zeros(size=(2, 0)), torch.zeros(size=(2, 0))
     edge_idx, edge_type = data_loader.graph2idx(graph, dev='cpu')
+    if use_paths:
+        path_idx, path_type = data_loader.load_paths(dev='cpu')
+
     # load train edges
     train_idx, train_type = edge_idx.clone(), edge_type.clone()
     # load invalid negative sampling for train set
@@ -66,6 +70,16 @@ def train_encoder(args, model, data_loader):
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, last_epoch=-1, gamma=0.5)
 
+    if use_paths:
+        batch_size = train_idx.shape[1] + path_idx.shape[1]
+        m = train_idx.shape[1] + path_idx.shape[1]
+    else:
+        batch_size = train_idx.shape[1]
+        m = train_idx.shape[1]
+
+    if args.batch > 0:
+        batch_size = args.batch
+
     for epoch in range(epochs):
         s_epoch = time.time()
         model.train()
@@ -77,8 +91,12 @@ def train_encoder(args, model, data_loader):
         train_head_invalid_sampling = train_head_invalid_sampling[perm]
         train_tail_invalid_sampling = train_tail_invalid_sampling[perm]
 
+        if use_paths:
+            perm = torch.randperm(path_idx.shape[1])
+            path_idx, path_type = path_idx[:, perm], path_type[:, perm]
+
         losses_epoch = []
-        m = train_idx.shape[1]  # all train edges
+        # all train edges
         for itt in range(0, m, batch_size):
             s_batch = time.time()
             # get batch boundaries
@@ -91,7 +109,7 @@ def train_encoder(args, model, data_loader):
             batch_head_invalid_sampling = train_head_invalid_sampling[start:end]
             batch_tail_invalid_sampling = train_tail_invalid_sampling[start:end]
 
-            # get positive and negative samples for batch
+            # get positive and negative samples for direct edges in batch
             s_sampling = time.time()
             batch_pos_idx, batch_neg_idx, batch_type = data_loader.negative_samples(n, batch_idx, batch_type,
                                                                                     negative_ratio,
@@ -102,7 +120,8 @@ def train_encoder(args, model, data_loader):
 
             # forward pass the model; getting the node embeddings out of the structural information
             s_forward = time.time()
-            h_prime, g_prime = model(edge_idx.to(dev), edge_type.to(dev))
+            h_prime, g_prime = model(edge_idx.to(dev), edge_type.to(dev), path_idx.to(dev), path_type.to(dev),
+                                     use_paths)
             t_forward = time.time()
 
             # compute model loss for positive and negative samples
@@ -139,7 +158,7 @@ def train_encoder(args, model, data_loader):
 
         # compute validation loss
         model.eval()
-        h_prime, g_prime = model(train_idx.to(dev), train_type.to(dev))
+        h_prime, g_prime = model(train_idx.to(dev), train_type.to(dev), path_idx.to(dev), path_type.to(dev), use_paths)
         valid_loss = model.loss(h_prime, g_prime, valid_pos_edge_epoch_idx.to(dev), valid_pos_edge_epoch_type.to(dev),
                                 valid_neg_edge_idx.to(dev), valid_pos_edge_epoch_type.to(dev)).item()
 
@@ -194,7 +213,7 @@ def main():
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval", type=int, default=1000, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
+    parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
@@ -202,17 +221,20 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="out for training.")
-    parser.add_argument("--dataset", type=str, default=FB15, help="Dataset used for training.")
-    parser.add_argument("--batch", type=int, default=272115, help="Batch size.")
+    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for training.")
+    parser.add_argument("--batch", type=int, default=-1, help="Batch size, -1 for full batch.")
     parser.add_argument("--negative_ratio", type=int, default=2, help="Number of negative edges per positive one.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
 
+    # path arguments
+    parser.add_argument("--use_paths", type=int, default=0, help="Use paths.")
+
     # encoder parameters
     parser.add_argument("--negative_slope", type=float, default=0.2, help="Negative slope for Leaky Relu")
     parser.add_argument("--heads", type=int, default=2, help="Number of heads per layer")
-    parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
+    parser.add_argument("--output_encoder", type=int, default=400, help="Number of neurons per output layer")
     parser.add_argument("--model", type=str, default=KBAT, help='Model name')
 
     args, cmdline_args = parser.parse_known_args()

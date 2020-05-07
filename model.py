@@ -241,7 +241,7 @@ class DKBATNet(KB):
 
         self.to(device)
 
-    def forward(self, edge_idx, edge_type):
+    def forward(self, edge_idx, edge_type, path_idx, path_type):
         torch.cuda.empty_cache()
         self.x_initial.data = F.normalize(
             self.x_initial.data, p=2, dim=1).detach()
@@ -249,8 +249,19 @@ class DKBATNet(KB):
         row, col = edge_idx
         rel = edge_type
 
+        row_path, col_path = path_idx
+        rel_1, rel_2 = path_type
+
         # compute h_ijk
-        h_ijk = torch.cat([self.x_initial[row, :], self.x_initial[col, :], self.g_initial[rel, :]], dim=1)
+        h_ijk_directed = torch.cat([self.x_initial[row, :], self.x_initial[col, :], self.g_initial[rel, :]], dim=1)
+
+        # compute h_ijk path
+        h_ijk_path = torch.cat([self.x_initial[row_path, :], self.x_initial[col_path, :],
+                                self.g_initial[rel_1, :] + self.g_initial[rel_2, :]], dim=1)
+
+        # merge direct edges and paths
+        h_ijk = torch.cat([h_ijk_directed, h_ijk_path], dim=0)
+
         h_inbound = self.inbound_input_layer(h_ijk, col, self.n)
         h_outbound = self.outbound_input_layer(h_ijk, row, self.n)
 
@@ -261,8 +272,16 @@ class DKBATNet(KB):
         # compute relation embedding
         g_prime = self.relation_layer(self.g_initial)
 
-        # copute h_ijk
-        h_ijk = torch.cat([h[row, :], h[col, :], g_prime[rel, :]], dim=1)
+        # compute edge representation for second layer
+        h_ijk_directed = torch.cat([h[row, :], h[col, :], g_prime[rel, :]], dim=1)
+
+        # compute h_ijk path
+        h_ijk_path = torch.cat([h[row_path, :], h[col_path, :],
+                                g_prime[rel_1, :] + g_prime[rel_2, :]], dim=1)
+
+        # merge direct edges and paths
+        h_ijk = torch.cat([h_ijk_directed, h_ijk_path], dim=0)
+
         h_inbound = self.inbound_output_layer(h_ijk, col, self.n)
         h_outbound = self.outbound_output_layer(h_ijk, row, self.n)
 
@@ -300,18 +319,32 @@ class KBNet(KB):
         self.dropout = nn.Dropout(dropout)
         self.to(device)
 
-    def forward(self, edge_idx, edge_type):
+    def forward(self, edge_idx, edge_type, path_idx, path_type, use_path):
         torch.cuda.empty_cache()
         self.x_initial.data = F.normalize(
             self.x_initial.data, p=2, dim=1).detach()
 
         row, col = edge_idx
         rel = edge_type
-        # edge representation
+        ends = col
+        if use_path:
+            row_path, col_path = path_idx
+            rel_1, rel_2 = path_type
+            ends = torch.cat([col, col_path])
+
+        # compute h_ijk
         h_ijk = torch.cat([self.x_initial[row, :], self.x_initial[col, :], self.g_initial[rel, :]], dim=1)
 
+        # compute h_ijk path
+        if use_path:
+            h_ijk_path = torch.cat([self.x_initial[row_path, :], self.x_initial[col_path, :],
+                                    self.g_initial[rel_1, :] + self.g_initial[rel_2, :]], dim=1)
+
+            # merge direct edges and paths
+            h_ijk = torch.cat([h_ijk, h_ijk_path], dim=0)
+
         # compute embedding
-        h = self.input_attention_layer(h_ijk, col, self.n)
+        h = self.input_attention_layer(h_ijk, ends, self.n)
 
         h = self.dropout(h)
 
@@ -319,7 +352,16 @@ class KBNet(KB):
 
         # computer edge representation for second layer
         h_ijk = torch.cat([h[row, :], h[col, :], g_prime[rel, :]], dim=1)
-        h = self.output_attention_layer(h_ijk, col, self.n).squeeze()
+
+        # compute h_ijk path
+        if use_path:
+            h_ijk_path = torch.cat([h[row_path, :], h[col_path, :],
+                                    g_prime[rel_1, :] + g_prime[rel_2, :]], dim=1)
+
+            # merge direct edges and paths
+            h_ijk = torch.cat([h_ijk, h_ijk_path], dim=0)
+
+        h = self.output_attention_layer(h_ijk, ends, self.n).squeeze()
 
         # add initial embeddings to last layer
         h_prime = self.entity_layer(self.x_initial, h)
