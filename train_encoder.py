@@ -45,10 +45,8 @@ def train_encoder(args, model, data_loader):
     n = x.shape[0]
 
     # load graph base structure
-    path_idx, path_type = torch.zeros(size=(2, 0)), torch.zeros(size=(2, 0))
     edge_idx, edge_type = data_loader.graph2idx(graph, dev='cpu')
-    if use_paths:
-        path_idx, path_type = data_loader.load_paths(use_partial,dev='cpu')
+    path_idx, path_type = data_loader.load_paths(use_paths,use_partial,dev='cpu')
 
     # load train edges
     train_idx, train_type = edge_idx.clone(), edge_type.clone()

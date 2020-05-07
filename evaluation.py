@@ -13,32 +13,34 @@ import torch.nn.functional as F
 import os.path as osp
 
 
-def get_embeddings(data_loader, dev, encoder):
+def get_embeddings(data_loader, dev, encoder, use_paths, use_partial):
     x, g, graph = data_loader.load_train(dev)
     # normalize input
 
     edge_idx, edge_type = DataLoader.graph2idx(graph, dev=dev)
+    path_idx, path_type = data_loader.load_paths(use_paths, use_partial, dev=dev)
     with torch.no_grad():
         encoder.eval()
-        h_prime, g_prime = encoder(edge_idx, edge_type)
+        h_prime, g_prime = encoder(edge_idx, edge_type, path_idx, path_type, use_paths)
     return h_prime, g_prime
 
 
-def evaluate_encoder(data_loader, fold, encoder, embedding_model, head, dev='cpu'):
+def evaluate_encoder(data_loader, fold, encoder, embedding_model, head, use_paths, use_partial, dev='cpu'):
     _, _, graph = data_loader.load_train()
     edge_idx, edge_type = data_loader.graph2idx(graph, dev)
+    path_idx, path_type = data_loader.load_paths(use_paths, use_partial, dev)
 
     with torch.no_grad():
         encoder.eval()
-        h, g = encoder(edge_idx, edge_type)
+        h, g = encoder(edge_idx, edge_type, path_idx, path_type, use_paths)
     metrics = get_model_metrics_head_or_tail(data_loader, h, g, fold, encoder, 'encoder', head, dev=dev)
     print(embedding_model + data_loader.get_name() + ' ' + fold + ' metrics:')
     print(metrics)
     wandb.log(metrics)
 
 
-def save_embedding(data_loader, encoder, embedding_model, dev='cpu'):
-    h_prime, g_prime = get_embeddings(data_loader, dev, encoder)
+def save_embedding(data_loader, encoder, embedding_model, use_paths, use_partial, dev='cpu'):
+    h_prime, g_prime = get_embeddings(data_loader, dev, encoder, use_paths, use_partial)
 
     data_name = data_loader.get_name()
     h_file = 'h_' + embedding_model.lower() + '_' + data_name.lower() + '.pt'
@@ -83,7 +85,8 @@ def evaluate_decoder(data_loader, fold, model_name, head, dev='cpu'):
 
     decoder, _, _ = load_decoder_eval(model_name, data_loader, h, g)
 
-    metrics = get_model_metrics_head_or_tail(data_loader, decoder.node_embeddings, decoder.rel_embeddings, fold, decoder, 'decoder', head, dev=dev)
+    metrics = get_model_metrics_head_or_tail(data_loader, decoder.node_embeddings, decoder.rel_embeddings, fold,
+                                             decoder, 'decoder', head, dev=dev)
     print(model_name + '_ConvKB ' + data_loader.get_name() + ' ' + fold + ' metrics:')
     print(metrics)
     wandb.log(metrics)
@@ -94,12 +97,12 @@ def main_encoder():
 
     # evaluation parameters
     parser.add_argument("--model", type=str, default=DKBAT, help="Model used for evaluation")
-    parser.add_argument("--dataset", type=str, default=WN18, help="Dataset used for evaluation.")
+    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for evaluation.")
     parser.add_argument("--fold", type=str, default='test', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
     parser.add_argument("--save", type=int, default=1, help="Save node embedding.")
-    parser.add_argument("--eval", type=int, default=0, help="Evaluate encoder.")
+    parser.add_argument("--eval", type=int, default=1, help="Evaluate encoder.")
     parser.add_argument("--device", type=str, default='cuda', help="Device to run model.")
 
     args, cmdline_args = parser.parse_known_args()
@@ -111,6 +114,13 @@ def main_encoder():
     save = True if args.save == 1 else False
     eval = True if args.eval == 1 else False
 
+    try:
+        use_paths = args.use_paths == 1
+        use_partial = args.use_partial == 1
+    except AttributeError:
+        use_paths = False
+        use_partial = False
+
     data_loader = get_data_loader(args.dataset)
 
     dataset_name = data_loader.get_name()
@@ -119,22 +129,22 @@ def main_encoder():
     model, epochs, args_original = load_encoder_eval(model_name, data_loader)
 
     if save:
-        save_embedding(data_loader, model, args.model, dev=args.device)
+        save_embedding(data_loader, model, args.model, use_paths, use_partial, dev=args.device)
 
     if eval:
         wandb.init(project=model_name + '_' + dataset_name + '_' + fold + '_' + prefix + '_eval', config=args)
         save_eval_model(model, model_name, dataset_name, args_original)
-        evaluate_encoder(data_loader, fold, model, args.model, head, dev=args.device)
+        evaluate_encoder(data_loader, fold, model, args.model, head, use_paths, use_partial, dev=args.device)
 
 
 def main_decoder():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--model", type=str, default=KBAT, help='Model name')
+    parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
 
     # evaluation parameters
-    parser.add_argument("--dataset", type=str, default=WN18, help="Dataset used for evaluation.")
+    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for evaluation.")
     parser.add_argument("--fold", type=str, default='test', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
@@ -154,4 +164,4 @@ def main_decoder():
 
 
 if __name__ == '__main__':
-    main_decoder()
+    main_encoder()

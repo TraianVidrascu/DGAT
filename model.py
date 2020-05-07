@@ -241,29 +241,34 @@ class DKBATNet(KB):
 
         self.to(device)
 
-    def forward(self, edge_idx, edge_type, path_idx, path_type):
+    def forward(self, edge_idx, edge_type, path_idx, path_type, use_path):
         torch.cuda.empty_cache()
         self.x_initial.data = F.normalize(
             self.x_initial.data, p=2, dim=1).detach()
 
         row, col = edge_idx
         rel = edge_type
-
-        row_path, col_path = path_idx
-        rel_1, rel_2 = path_type
+        ends_col = col
+        ends_row = row
+        if use_path:
+            row_path, col_path = path_idx
+            rel_1, rel_2 = path_type
+            ends_col = torch.cat([col, col_path])
+            ends_row = torch.cat([row, row_path])
 
         # compute h_ijk
-        h_ijk_directed = torch.cat([self.x_initial[row, :], self.x_initial[col, :], self.g_initial[rel, :]], dim=1)
+        h_ijk = torch.cat([self.x_initial[row, :], self.x_initial[col, :], self.g_initial[rel, :]], dim=1)
 
         # compute h_ijk path
-        h_ijk_path = torch.cat([self.x_initial[row_path, :], self.x_initial[col_path, :],
-                                self.g_initial[rel_1, :] + self.g_initial[rel_2, :]], dim=1)
+        if use_path:
+            h_ijk_path = torch.cat([self.x_initial[row_path, :], self.x_initial[col_path, :],
+                                    self.g_initial[rel_1, :] + self.g_initial[rel_2, :]], dim=1)
 
-        # merge direct edges and paths
-        h_ijk = torch.cat([h_ijk_directed, h_ijk_path], dim=0)
+            # merge direct edges and paths
+            h_ijk = torch.cat([h_ijk, h_ijk_path], dim=0)
 
-        h_inbound = self.inbound_input_layer(h_ijk, col, self.n)
-        h_outbound = self.outbound_input_layer(h_ijk, row, self.n)
+        h_inbound = self.inbound_input_layer(h_ijk, ends_col, self.n)
+        h_outbound = self.outbound_input_layer(h_ijk, ends_row, self.n)
 
         alpha = self.alpha_input(h_inbound, h_outbound)
         h = alpha * h_inbound + (1 - alpha) * h_outbound
@@ -273,17 +278,18 @@ class DKBATNet(KB):
         g_prime = self.relation_layer(self.g_initial)
 
         # compute edge representation for second layer
-        h_ijk_directed = torch.cat([h[row, :], h[col, :], g_prime[rel, :]], dim=1)
+        h_ijk = torch.cat([h[row, :], h[col, :], g_prime[rel, :]], dim=1)
 
         # compute h_ijk path
-        h_ijk_path = torch.cat([h[row_path, :], h[col_path, :],
-                                g_prime[rel_1, :] + g_prime[rel_2, :]], dim=1)
+        if use_path:
+            h_ijk_path = torch.cat([h[row_path, :], h[col_path, :],
+                                    g_prime[rel_1, :] + g_prime[rel_2, :]], dim=1)
 
-        # merge direct edges and paths
-        h_ijk = torch.cat([h_ijk_directed, h_ijk_path], dim=0)
+            # merge direct edges and paths
+            h_ijk = torch.cat([h_ijk, h_ijk_path], dim=0)
 
-        h_inbound = self.inbound_output_layer(h_ijk, col, self.n)
-        h_outbound = self.outbound_output_layer(h_ijk, row, self.n)
+        h_inbound = self.inbound_output_layer(h_ijk, ends_col, self.n)
+        h_outbound = self.outbound_output_layer(h_ijk, ends_row, self.n)
 
         alpha = self.alpha_output(h_inbound, h_outbound)
         h = alpha * h_inbound + (1 - alpha) * h_outbound
