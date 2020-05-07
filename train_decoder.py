@@ -11,6 +11,8 @@ from metrics import get_model_metrics
 from utilis import save_best_decoder, set_random_seed, load_embedding, save_embeddings, \
     DECODER, EMBEDDING_DIR, KBAT, get_decoder, DECODER_NAME, get_data_loader, save_model, DKBAT
 
+from torch.optim.lr_scheduler import CyclicLR
+
 
 def train_decoder(args, decoder, data_loader, h, g):
     wandb.watch(decoder, log="all")
@@ -33,8 +35,8 @@ def train_decoder(args, decoder, data_loader, h, g):
 
     first = 0
 
-    optim = torch.optim.Adam(decoder.parameters(), lr=lr, weight_decay=decay)
-    scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=step_size, gamma=0.5, last_epoch=-1)
+    optim = torch.optim.SGD(decoder.parameters(),momentum=0.9, lr=1e-3, weight_decay=decay)
+    scheduler = torch(optim, base_lr=1e-8, max_lr=1e-5, step_size_up=step_size)
 
     train_pos_idx, train_pos_type = data_loader.graph2idx(graph, dev='cpu')
     train_head_invalid_sampling, train_tail_invalid_sampling = data_loader.load_invalid_sampling('train')
@@ -102,7 +104,8 @@ def train_decoder(args, decoder, data_loader, h, g):
                   'Loss iteration:%.4f ' % loss.item() +
                   'Time sampling:%.4f ' % (t_sampling - s_sampling) +
                   'Time prediction:%.4f ' % (t_pred - s_pred) +
-                  'Time batch:%.4f ' % (t_batch - s_batch))
+                  'Time batch:%.4f ' % (t_batch - s_batch) +
+                  'Time Lr:%.10f ' % (scheduler.get_lr()[0]))
             del prediction, loss
             torch.cuda.empty_cache()
         scheduler.step()
@@ -128,6 +131,9 @@ def train_decoder(args, decoder, data_loader, h, g):
         else:
             wandb.log({'train_' + dataset_name + '_Loss_decoder': loss_epoch})
 
+    decoder_epoch_file = DECODER_NAME + '_' + model.lower() + '_' + dataset_name.lower() + '_final.pt'
+    save_model(decoder, -1, -1, decoder_epoch_file, args)
+
 
 def main():
     set_random_seed()
@@ -137,22 +143,22 @@ def main():
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval", type=int, default=100, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
+    parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=200, help="Number of training epochs for decoder.")
-    parser.add_argument("--step_size", type=int, default=25, help="Step size of scheduler.")
+    parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs for decoder.")
+    parser.add_argument("--step_size", type=int, default=3, help="Step size of scheduler.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay decoder.")
     parser.add_argument("--dropout", type=float, default=0.0, help="Dropout for training")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size for decoder.")
     parser.add_argument("--negative-ratio", type=int, default=40, help="Number of negative samples.")
-    parser.add_argument("--dataset", type=str, default=WN18, help="Dataset used for training.")
-    parser.add_argument("--model", type=str, default=KINSHIP, help="Which model's embedding to use.")
+    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for training.")
+    parser.add_argument("--model", type=str, default=KBAT, help="Which model's embedding to use.")
     # objective function parameters
 
     # decoder parameters
-    parser.add_argument("--channels", type=int, default=500, help="Number of channels for decoder.")
+    parser.add_argument("--channels", type=int, default=50, help="Number of channels for decoder.")
 
     args, cmdline_args = parser.parse_known_args()
 

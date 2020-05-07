@@ -1,3 +1,5 @@
+import queue
+import time
 from collections import defaultdict
 
 import torch
@@ -152,7 +154,7 @@ class Dataset:
         x, node_mapper = self.read_entities()
         g, rel_mapper = self.read_relations()
         self.read_edges(node_mapper, rel_mapper)
-        # self.save_paths(2)
+        self.save_paths()
         self.filter_evaluation_folds()
         valid_triples = self.get_valid_triplets()
         self.save_invalid_sampling(valid_triples)
@@ -269,37 +271,113 @@ class Dataset:
 
         return triplets, lists
 
-    def load_paths(self):
-        path_name = self.processed_dir + 'paths_2.pkl'
-        with open(path_name, 'rb') as handler:
-            paths = pk.load(handler)
+    def load_paths(self, use_partial):
+        if use_partial:
+            path_name = self.processed_dir + 'partial.pt'
+        else:
+            path_name = self.processed_dir + 'paths.pt'
+        paths = torch.load(path_name)
         return paths
 
-    def dfs_path(self, graph, path, node, depth, max_depth):
-        depth += 1
-        if depth == 0:
-            path = [node]
-        if depth == max_depth:
-            new_path = path + [node]
-            self.paths.append(new_path)
-            return
-        outbounds = graph[node]
-        for outbound in outbounds.keys():
-            label = outbounds[outbound][0]['label']
-            new_path = path + [label]
-            self.dfs_path(graph, new_path, outbound, depth, max_depth)
+    def bfs(self, graph, node):
+        visit = {}
+        distance = {}
+        parent = {}
+        distance_lengths = {}
 
-    def save_paths(self, depth=2):
+        visit[node] = 1
+        distance[node] = 0
+        parent[node] = (-1, -1)
+
+        q = queue.Queue()
+        q.put((node, -1))
+
+        while not q.empty():
+            top = q.get()
+            if top[0] in graph.nodes():
+                for target in graph[top[0]].keys():
+                    if (target in visit.keys()):
+                        continue
+                    else:
+                        q.put((target, graph[top[0]][target][0]['label']))
+
+                        distance[target] = distance[top[0]] + 1
+
+                        visit[target] = 1
+                        if distance[target] > 2:
+                            continue
+                        parent[target] = (top[0], graph[top[0]][target][0]['label'])
+
+                        if distance[target] not in distance_lengths.keys():
+                            distance_lengths[distance[target]] = 1
+        neighbors = {}
+        for target in visit.keys():
+            if (distance[target] != 2):
+                continue
+            relations = []
+            entities = [target]
+            temp = target
+            while (parent[temp] != (-1, -1)):
+                relations.append(parent[temp][1])
+                entities.append(parent[temp][0])
+                temp = parent[temp][0]
+
+            if (distance[target] in neighbors.keys()):
+                neighbors[distance[target]].append(
+                    (tuple(relations), tuple(entities[:-1])))
+            else:
+                neighbors[distance[target]] = [
+                    (tuple(relations), tuple(entities[:-1]))]
+
+        return neighbors
+
+    def get_further_neighbors(self):
         _, _, graph = self.load_fold('train', 'cpu')
         nodes = graph.nodes()
-        columns = ['x'] + ['g_' + str(i) for i in range(1, depth + 1)] + ['y']
+        neighbors = {}
+        start_time = time.time()
+        print("length of graph keys is ", len(nodes))
+        for source in nodes:
+            temp_neighbors = self.bfs(graph, source)
+            for distance in temp_neighbors.keys():
+                if (source in neighbors.keys()):
+                    if (distance in neighbors[source].keys()):
+                        neighbors[source][distance].append(
+                            temp_neighbors[distance])
+                    else:
+                        neighbors[source][distance] = temp_neighbors[distance]
+                else:
+                    neighbors[source] = {}
+                    neighbors[source][distance] = temp_neighbors[distance]
 
-        for node in nodes:
-            self.dfs_path(graph, [], node, -1, depth)
-            print('Launched: ' + str(node) + ' depth: ' + str(depth))
+        print("time taken ", time.time() - start_time)
 
-        df = pd.DataFrame(columns=columns, data=self.paths, dtype=int)
-        df.to_pickle(self.processed_dir + 'paths_' + str(depth) + '.pkl')
+        print("length of neighbors dict is ", len(neighbors))
+        return neighbors
+
+    def save_paths(self):
+        neighbors = self.get_further_neighbors()
+        path_triplets = []
+        partial_paths = []
+        for key in neighbors.keys():
+            paths = neighbors[key]
+            for i, path in enumerate(paths[2]):
+                x = key
+                g_1 = path[0][0]
+                g_2 = path[0][1]
+                y = path[1][0]
+
+                path_triplets.append(torch.tensor([x, g_1, g_2, y]).long())
+                if i < 2:
+                    partial_paths.append(torch.tensor([x, g_1, g_2, y]).long())
+
+        path_triplets = torch.stack(path_triplets)
+        file = self.processed_dir + 'paths.pt'
+        torch.save(path_triplets, file, pickle_protocol=pk.HIGHEST_PROTOCOL)
+
+        partial_paths = torch.stack(partial_paths)
+        file = self.processed_dir + 'partial.pt'
+        torch.save(partial_paths, file, pickle_protocol=pk.HIGHEST_PROTOCOL)
 
     @staticmethod
     def dd():

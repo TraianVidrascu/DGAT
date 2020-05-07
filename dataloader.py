@@ -163,8 +163,8 @@ class DataLoader:
         invalid_head_sampling, invalid_tail_sampling = self.dataset.load_invalid_sampling(fold)
         return invalid_head_sampling, invalid_tail_sampling
 
-    def load_paths(self, dev='cpu'):
-        paths = self.dataset.load_paths()
+    def load_paths(self,use_partial, dev='cpu'):
+        paths = self.dataset.load_paths(use_partial)
         path_idx = torch.stack([paths[:, 0], paths[:, 3]]).long().to(dev)
         path_type = torch.stack([paths[:, 1], paths[:, 2]]).long().to(dev)
         return path_idx, path_type

@@ -34,6 +34,7 @@ def train_encoder(args, model, data_loader):
     step_size = args.step_size
     negative_ratio = args.negative_ratio
     use_paths = args.use_paths == 1
+    use_partial = args.use_partial == 1
 
     # encoder save file path
     dataset_name = data_loader.get_name()
@@ -47,7 +48,7 @@ def train_encoder(args, model, data_loader):
     path_idx, path_type = torch.zeros(size=(2, 0)), torch.zeros(size=(2, 0))
     edge_idx, edge_type = data_loader.graph2idx(graph, dev='cpu')
     if use_paths:
-        path_idx, path_type = data_loader.load_paths(dev='cpu')
+        path_idx, path_type = data_loader.load_paths(use_partial,dev='cpu')
 
     # load train edges
     train_idx, train_type = edge_idx.clone(), edge_type.clone()
@@ -229,7 +230,8 @@ def main():
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
 
     # path arguments
-    parser.add_argument("--use_paths", type=int, default=0, help="Use paths.")
+    parser.add_argument("--use_paths", type=int, default=1, help="Use paths.")
+    parser.add_argument("--use_partial", type=int, default=1, help="Use a subsample of paths.")
 
     # encoder parameters
     parser.add_argument("--negative_slope", type=float, default=0.2, help="Negative slope for Leaky Relu")
