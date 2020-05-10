@@ -151,13 +151,13 @@ class Dataset:
         self.read_edges_fold('test', node_mapper, rel_mapper)
 
     def pre_process(self):
-        x, node_mapper = self.read_entities()
-        g, rel_mapper = self.read_relations()
-        self.read_edges(node_mapper, rel_mapper)
+        # x, node_mapper = self.read_entities()
+        # g, rel_mapper = self.read_relations()
+        # self.read_edges(node_mapper, rel_mapper)
         self.save_paths()
-        self.filter_evaluation_folds()
-        valid_triples = self.get_valid_triplets()
-        self.save_invalid_sampling(valid_triples)
+        # self.filter_evaluation_folds()
+        # valid_triples = self.get_valid_triplets()
+        # self.save_invalid_sampling(valid_triples)
 
     @staticmethod
     def find(tensor, values):
@@ -349,13 +349,13 @@ class Dataset:
                 else:
                     neighbors[source] = {}
                     neighbors[source][distance] = temp_neighbors[distance]
-
+            print('Done: %.d'%source)
         print("time taken ", time.time() - start_time)
 
         print("length of neighbors dict is ", len(neighbors))
         return neighbors
 
-    def save_paths(self):
+    def  save_paths(self):
         neighbors = self.get_further_neighbors()
         path_triplets = []
         partial_paths = []

@@ -48,17 +48,39 @@ def verify_evaluation(data_loader):
             break
 
 
+def transfer_embeddings():
+    file = './eval_dir/embeddings/trained_3599.pth'
+    file_h = './eval_dir/embeddings/h_kbat_kinship.pt'
+    file_g = './eval_dir/embeddings/g_kbat_kinship.pt'
+    trained = torch.load(file)
+    h = torch.load(file_h)
+    g = torch.load(file_g)
+    trained['final_entity_embeddings'] = h
+    trained['final_relation_embeddings'] = g
+
+    file = './eval_dir/embeddings/trained_4000.pth'
+    torch.save(trained, file)
+
+
+def transfer_paper_decoder_2_my_decoder(paper_decoder, decoder):
+    decoder['model_state_dict']['node_embeddings'] = paper_decoder['final_entity_embeddings']
+    decoder['model_state_dict']['rel_embeddings'] = paper_decoder['final_relation_embeddings']
+    decoder['model_state_dict']['conv.conv_layer.weight'] = paper_decoder['convKB.conv_layer.weight']
+    decoder['model_state_dict']['conv.conv_layer.bias'] = paper_decoder['convKB.conv_layer.bias']
+    decoder['model_state_dict']['conv.fc_layer.weight'] = paper_decoder['convKB.fc_layer.weight']
+    decoder['model_state_dict']['conv.fc_layer.bias'] = paper_decoder['convKB.fc_layer.bias']
+    file = 'eval_dir/decoder/ConvKB_kbat_kinship.pt'
+    torch.save(decoder, file)
+
+
 if __name__ == '__main__':
-    dataset = Kinship()
+    # file = './eval_dir/decoder/trained_399.pth'
+    # decoder = torch.load(file)
+    # file_2 = 'eval_dir/decoder/temporary.pt'
+    # my_decoder = torch.load(file_2)
+    # transfer_paper_decoder_2_my_decoder(decoder, my_decoder)
+    # print(decoder)
+    # print(my_decoder['model_state_dict'])
+
+    dataset = FB15Dataset()
     dataset.pre_process()
-    # file = './eval_dir/embeddings/trained_3599.pth'
-    # file_h = './eval_dir/embeddings/h_kbat_kinship.pt'
-    # file_g = './eval_dir/embeddings/g_kbat_kinship.pt'
-    # trained = torch.load(file)
-    # h = torch.load(file_h)
-    # g = torch.load(file_g)
-    # trained['final_entity_embeddings'] = h
-    # trained['final_relation_embeddings'] = g
-    #
-    # file = './eval_dir/embeddings/trained_4000.pth'
-    # torch.save(trained,file)

@@ -11,4 +11,4 @@
 
 
 conda activate dgat
-python train_encoder.py --debug 0 --model DKBAT --dataset WN18RR --margin 5 --epochs 3600 --step_size 500 --decay 5e-6
+python train_encoder.py --use_paths 1 --use_partial 0 --debug 0 --model DKBAT --dataset WN18RR --margin 5 --epochs 3600 --step_size 500 --decay 5e-6

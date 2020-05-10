@@ -182,6 +182,7 @@ class KB(nn.Module):
 
     @staticmethod
     def _dissimilarity(h, g, edge_idx, edge_type):
+        torch.cuda.empty_cache()
         row, col = edge_idx
         d_norm = torch.norm(h[row, :] + g[edge_type, :] - h[col, :], p=1, dim=1)
         return d_norm
