@@ -96,13 +96,13 @@ def main_encoder():
     parser = argparse.ArgumentParser()
 
     # evaluation parameters
-    parser.add_argument("--model", type=str, default=KBAT, help="Model used for evaluation")
-    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for evaluation.")
+    parser.add_argument("--model", type=str, default=DKBAT, help="Model used for evaluation")
+    parser.add_argument("--dataset", type=str, default=WN18, help="Dataset used for evaluation.")
     parser.add_argument("--fold", type=str, default='test', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
     parser.add_argument("--save", type=int, default=1, help="Save node embedding.")
-    parser.add_argument("--eval", type=int, default=1, help="Evaluate encoder.")
+    parser.add_argument("--eval", type=int, default=0, help="Evaluate encoder.")
     parser.add_argument("--device", type=str, default='cuda', help="Device to run model.")
 
     args, cmdline_args = parser.parse_known_args()
@@ -144,7 +144,7 @@ def main_decoder():
     parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
 
     # evaluation parameters
-    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for evaluation.")
+    parser.add_argument("--dataset", type=str, default=FB15, help="Dataset used for evaluation.")
     parser.add_argument("--fold", type=str, default='test', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 
@@ -164,4 +164,4 @@ def main_decoder():
 
 
 if __name__ == '__main__':
-    main_decoder()
+    main_encoder()
