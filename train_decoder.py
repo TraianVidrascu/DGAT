@@ -35,7 +35,7 @@ def train_decoder(args, decoder, data_loader, h, g):
 
     first = 0
 
-    optim = torch.optim.Adam(decoder.parameters(), lr=lr, weight_decay=decay)
+    optim = torch.optim.SGD(decoder.parameters(), lr=lr, momentum=0.9, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optim, gamma=0.5, step_size=step_size)
 
     train_pos_idx, train_pos_type = data_loader.graph2idx(graph, dev='cpu')
