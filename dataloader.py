@@ -166,7 +166,7 @@ class DataLoader:
     def load_paths(self, use_paths, use_partial, dev='cpu'):
         if not use_paths:
             path_idx, path_type = torch.zeros(size=(2, 0)), torch.zeros(size=(2, 0))
-            return path_idx, path_type
+            return path_idx.long(), path_type.long()
         paths = self.dataset.load_paths(use_partial)
         path_idx = torch.stack([paths[:, 0], paths[:, 3]]).long().to(dev)
         path_type = torch.stack([paths[:, 1], paths[:, 2]]).long().to(dev)
