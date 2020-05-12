@@ -5,9 +5,9 @@
 #SBATCH --time=27:00:00
 #SBATCH --mem=60000M
 #SBATCH --gres=gpu:1
-#SBATCH --partition=gpu_shared
+#SBATCH --partition=gpu_titanrtx_shared
 #SBATCH --mail-type=BEGIN,END
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
 
 conda activate dgat
-python train_decoder.py --debug 0 --model DKBAT --channels 400 --dropout 0 --batch_size 128 --negative-ratio 40 --eval 100 --epochs 200 --dataset WN18RR
+python train_decoder.py --debug 0 --model DKBAT --channels 500 --dropout 0 --batch_size 128 --negative-ratio 40 --eval 100 --epochs 200 --dataset WN18RR
