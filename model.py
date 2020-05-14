@@ -152,7 +152,7 @@ class RelationLayer(nn.Module):
 
     def forward(self, h, g, edge_idx, edge_type):
         row, col = edge_idx
-        h_ij = torch.cat([h[row, :], h[col, :], g[edge_type, :]], dim=1)
+        h_ij = torch.cat([h[row, :], h[col, :]], dim=1)
         h_ij = self.fc1(h_ij)
 
         g_edges = scatter_add(h_ij, edge_type, dim=0)
