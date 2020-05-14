@@ -135,7 +135,7 @@ class RelationLayer(nn.Module):
         super(RelationLayer, self).__init__()
         # relation layer
         self.weights_rel = nn.Linear(in_size, out_size, bias=True)
-        self.fc1 = nn.Linear(h_size, out_size, bias=True)
+        self.fc1 = nn.Linear(h_size + 2 * h_size, out_size, bias=True)
         self.init_params()
 
         self.dropout = nn.Dropout(dropout)
@@ -150,10 +150,8 @@ class RelationLayer(nn.Module):
         nn.init.zeros_(self.weights_rel.bias)
         nn.init.zeros_(self.fc1.bias)
 
-    def forward(self, h, g, edge_idx, edge_type):
-        row, col = edge_idx
-        h_ij = (h[row, :] + h[col, :]) / 2
-        h_ij = self.fc1(h_ij)
+    def forward(self, h_ijk, g, edge_type):
+        h_ij = self.fc1(h_ijk)
 
         g_edges = scatter_add(h_ij, edge_type, dim=0)
         g_edges = F.normalize(g_edges, dim=1, p=2)
@@ -256,7 +254,7 @@ class DKBATNet(KB):
         self.merge_layer_output = MergeLayer(output_size * heads, device)
 
         self.entity_layer = EntityLayer(self.x_size, heads * output_size, device=device)
-        self.relation_layer = RelationLayer(self.g_size, output_size * heads, heads * output_size, negative_slope,
+        self.relation_layer = RelationLayer(self.g_size, output_size * heads, self.x_size, negative_slope,
                                             dropout, device=device)
 
         self.dropout = nn.Dropout(dropout)
@@ -301,7 +299,7 @@ class DKBATNet(KB):
         h = self.dropout(h)
 
         # compute relation embedding
-        g_prime = self.relation_layer(h, self.g_initial, edge_idx, edge_type)
+        g_prime = self.relation_layer(h_ijk, self.g_initial, edge_type)
 
         # compute edge representation for second layer
         h_ijk = torch.cat([h[row, :], h[col, :], g_prime[rel, :]], dim=1)
