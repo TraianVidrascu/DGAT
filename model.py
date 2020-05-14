@@ -135,7 +135,7 @@ class RelationLayer(nn.Module):
         super(RelationLayer, self).__init__()
         # relation layer
         self.weights_rel = nn.Linear(in_size, out_size, bias=True)
-        self.fc1 = nn.Linear(h_size * 2 + in_size, out_size, bias=True)
+        self.fc1 = nn.Linear(h_size * 2, out_size, bias=True)
         self.init_params()
 
         self.dropout = nn.Dropout(dropout)
