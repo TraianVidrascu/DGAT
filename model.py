@@ -135,7 +135,7 @@ class RelationLayer(nn.Module):
         super(RelationLayer, self).__init__()
         # relation layer
         self.weights_rel = nn.Linear(in_size, out_size, bias=True)
-        self.fc1 = nn.Linear(h_size * 2, out_size, bias=True)
+        self.fc1 = nn.Linear(h_size, out_size, bias=True)
         self.init_params()
 
         self.dropout = nn.Dropout(dropout)
@@ -152,7 +152,7 @@ class RelationLayer(nn.Module):
 
     def forward(self, h, g, edge_idx, edge_type):
         row, col = edge_idx
-        h_ij = torch.cat([h[row, :], h[col, :]], dim=1)
+        h_ij = (h[row, :] + h[col, :]) / 2
         h_ij = self.fc1(h_ij)
 
         g_edges = scatter_add(h_ij, edge_type, dim=0)
