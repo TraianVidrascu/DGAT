@@ -107,6 +107,7 @@ class RelationalAttentionLayer(nn.Module):
         h = self._aggregate(ends, alpha, c_ijk)
         h = F.elu(h)
 
+        h = F.normalize(h, dim=2, p=2)
         if self.concat:
             h = self._concat(h)
         return h
@@ -133,7 +134,7 @@ class RelationLayer(nn.Module):
     def __init__(self, in_size, out_size, device):
         super(RelationLayer, self).__init__()
         # relation layer
-        self.weights_rel = nn.Linear(in_size, out_size)
+        self.weights_rel = nn.Linear(in_size, out_size, bias=True)
         self.init_params()
 
         self.to(device)
@@ -141,31 +142,40 @@ class RelationLayer(nn.Module):
 
     def init_params(self):
         nn.init.xavier_normal_(self.weights_rel.weight, gain=1.414)
+        nn.init.zeros_(self.weights_rel.bias)
 
     def forward(self, g):
         g_prime = self.weights_rel(g)
         return g_prime
 
 
-class AlphaLayer(nn.Module):
+class MergeLayer(nn.Module):
     def __init__(self, h_size, device='cpu'):
-        super(AlphaLayer, self).__init__()
-        self.alpha = nn.Linear(2 * h_size, 1)
-        self.actv = nn.Sigmoid()
-
+        super(MergeLayer, self).__init__()
+        self.weight_inbound = nn.Linear(h_size, h_size, bias=True)
+        self.weight_outbound = nn.Linear(h_size, h_size, bias=True)
+        self.lambda_layer = nn.Linear(h_size * 2, 1, bias=True)
         self.init_params()
-
         self.to(device)
-        self.device = device
-
-    def init_params(self):
-        nn.init.xavier_normal_(self.alpha.weight, gain=1.414)
 
     def forward(self, h_inbound, h_outbound):
-        h_all = torch.cat([h_inbound, h_outbound], dim=-1)
-        alpha = self.alpha(h_all)
-        alpha = self.actv(alpha)
-        return alpha
+        h_inbound = self.weight_inbound(h_inbound)
+        h_outbound = self.weight_outbound(h_outbound)
+        lambda_param = self.lambda_layer(torch.cat([h_inbound, h_outbound], dim=1))
+        lambda_param = torch.sigmoid(lambda_param)
+        h = lambda_param * h_inbound + (1 - lambda_param) * h_outbound
+        h = F.elu(h)
+        h = F.normalize(h, dim=1, p=2)
+        return h
+
+    def init_params(self):
+        nn.init.xavier_normal_(self.weight_inbound.weight, gain=1.414)
+        nn.init.xavier_normal_(self.weight_outbound.weight, gain=1.414)
+        nn.init.xavier_normal_(self.lambda_layer.weight, gain=1.414)
+
+        nn.init.zeros_(self.weight_inbound.bias)
+        nn.init.zeros_(self.weight_outbound.bias)
+        nn.init.zeros_(self.lambda_layer.bias)
 
 
 class KB(nn.Module):
@@ -215,7 +225,7 @@ class DKBATNet(KB):
                                                              negative_slope=negative_slope,
                                                              dropout=dropout,
                                                              device=device)
-        self.alpha_input = AlphaLayer(output_size * heads, device)
+        self.merge_layer_input = MergeLayer(output_size * heads, device)
 
         self.inbound_output_layer = RelationalAttentionLayer(output_size * heads, output_size * heads,
                                                              output_size * heads, 1,
@@ -228,7 +238,7 @@ class DKBATNet(KB):
                                                               dropout=dropout,
                                                               device=device)
 
-        self.alpha_output = AlphaLayer(output_size * heads, device)
+        self.merge_layer_output = MergeLayer(output_size * heads, device)
 
         self.entity_layer = EntityLayer(self.x_size, heads * output_size, device=device)
         self.relation_layer = RelationLayer(self.g_size, output_size * heads, device=device)
@@ -271,8 +281,7 @@ class DKBATNet(KB):
         h_inbound = self.inbound_input_layer(h_ijk, ends_col, self.n)
         h_outbound = self.outbound_input_layer(h_ijk, ends_row, self.n)
 
-        alpha = self.alpha_input(h_inbound, h_outbound)
-        h = alpha * h_inbound + (1 - alpha) * h_outbound
+        h = self.merge_layer_input(h_inbound, h_outbound)
         h = self.dropout(h)
 
         # compute relation embedding
@@ -292,8 +301,7 @@ class DKBATNet(KB):
         h_inbound = self.inbound_output_layer(h_ijk, ends_col, self.n)
         h_outbound = self.outbound_output_layer(h_ijk, ends_row, self.n)
 
-        alpha = self.alpha_output(h_inbound, h_outbound)
-        h = alpha * h_inbound + (1 - alpha) * h_outbound
+        h = self.merge_layer_output(h_inbound, h_outbound)
 
         h_prime = self.entity_layer(self.x_initial, h)
 
@@ -448,4 +456,54 @@ class ConvKB(nn.Module):
 
         input_fc = out_conv.squeeze(-1).view(batch_size, -1)
         output = self.fc_layer(input_fc)
+        return output
+
+
+class PartModel(nn.Module):
+    def __init__(self, x_initial, g_initial, input_dim, input_seq_len, in_channels, out_channels=50, drop_prob=0.0,
+                 dev='cpu'):
+        super().__init__()
+        self.conv_layer = nn.Conv2d(
+            in_channels, out_channels, (1, input_seq_len))
+
+        self.fc1_layer = nn.Linear((input_dim) * out_channels, 50)
+        self.fc2_layer = nn.Linear(50, 1)
+
+        self.x_initial = nn.Parameter(x_initial.clone(), requires_grad=False)
+        self.g_initial = nn.Parameter(g_initial.clone(), requires_grad=False)
+
+        self.x = nn.Parameter(x_initial, requires_grad=True)
+        self.g = nn.Parameter(g_initial, requires_grad=True)
+
+        nn.init.xavier_uniform_(self.fc1_layer.weight, gain=1.414)
+        nn.init.xavier_uniform_(self.fc2_layer.weight, gain=1.414)
+        nn.init.xavier_uniform_(self.conv_layer.weight, gain=1.414)
+
+        self.non_linearity = nn.ReLU()
+        self.dropout = nn.Dropout(drop_prob)
+
+        self.to(dev)
+        self.dev = dev
+
+    def forward(self, edge_idx, edge_type):
+        row, col = edge_idx
+
+        conv_input = torch.stack(
+            [self.x[row, :], self.g[edge_type, :], self.g[col, :], self.x_initial[row, :], self.g_initial[edge_type, :],
+             self.x_initial[col, :]],
+            dim=1).to(self.dev)
+
+        batch_size, length, dim = conv_input.size()
+        # assuming inputs are of the form ->
+        conv_input = conv_input.transpose(1, 2)
+        # batch * length(which is 3 here -> entity,relation,entity) * dim
+        # To make tensor of size 4, where second dim is for input channels
+        conv_input = conv_input.unsqueeze(1)
+
+        out_conv = self.dropout(
+            self.non_linearity(self.conv_layer(conv_input)))
+
+        input_fc = out_conv.squeeze(-1).view(batch_size, -1)
+        output = self.fc1_layer(input_fc)
+        output = self.fc2_layer(output)
         return output
