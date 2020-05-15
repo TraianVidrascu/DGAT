@@ -21,7 +21,7 @@ class RelationLayer(nn.Module):
         nn.init.zeros_(self.weights_rel.bias)
 
     def forward(self, g_initial, c_ijk, edge_type):
-        g = scatter_add(c_ijk, edge_type, dim=0)
+        g = scatter_add(c_ijk, edge_type, dim=0).squeeze()
         g_prime = self.weights_rel(g_initial) + self.weights_g(g)
         g_prime = F.normalize(g_prime, p=2, dim=-1)
         return g_prime
