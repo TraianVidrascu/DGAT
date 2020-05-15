@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter_add
 
+from relation_embedding_layer import RelationLayer
+
 
 class RelationalAttentionLayer(nn.Module):
     def __init__(self, in_size_h, in_size_g, out_size, heads=2, concat=True, bias=True,
@@ -130,36 +132,6 @@ class EntityLayer(nn.Module):
         return h_prime
 
 
-class RelationLayer(nn.Module):
-    def __init__(self, in_size, out_size, h_size, negative_slope, dropout, device):
-        super(RelationLayer, self).__init__()
-        # relation layer
-        self.weights_rel = nn.Linear(in_size, out_size, bias=True)
-        self.fc1 = nn.Linear(in_size + 2 * h_size, out_size, bias=True)
-        self.init_params()
-
-        self.dropout = nn.Dropout(dropout)
-        self.leaky_relu = nn.LeakyReLU(negative_slope)
-
-        self.to(device)
-        self.device = device
-
-    def init_params(self):
-        nn.init.xavier_normal_(self.weights_rel.weight, gain=1.414)
-        nn.init.xavier_normal_(self.fc1.weight, gain=1.414)
-        nn.init.zeros_(self.weights_rel.bias)
-        nn.init.zeros_(self.fc1.bias)
-
-    def forward(self, h_ijk, g, edge_type):
-        g_edges = scatter_add(h_ijk, edge_type, dim=0)
-        g_edges = F.normalize(g_edges, dim=1, p=2)
-        g_edges = F.elu(g_edges)
-
-        g_prime = self.weights_rel(g) + self.fc1(g_edges)
-
-        return g_prime
-
-
 class MergeLayer(nn.Module):
     def __init__(self, h_size, device='cpu'):
         super(MergeLayer, self).__init__()
@@ -252,8 +224,7 @@ class DKBATNet(KB):
         self.merge_layer_output = MergeLayer(output_size * heads, device)
 
         self.entity_layer = EntityLayer(self.x_size, heads * output_size, device=device)
-        self.relation_layer = RelationLayer(self.g_size, output_size * heads, self.x_size, negative_slope,
-                                            dropout, device=device)
+        self.relation_layer = RelationLayer(self.g_size, output_size * heads, device=device)
 
         self.dropout = nn.Dropout(dropout)
 
@@ -297,7 +268,7 @@ class DKBATNet(KB):
         h = self.dropout(h)
 
         # compute relation embedding
-        g_prime = self.relation_layer(h_ijk, self.g_initial, edge_type)
+        g_prime = self.relation_layer(self.g_initial, h_ijk,edge_type)
 
         # compute edge representation for second layer
         h_ijk = torch.cat([h[row, :], h[col, :], g_prime[rel, :]], dim=1)
@@ -336,8 +307,7 @@ class KBNet(KB):
                                                                device=device, concat=False)
 
         self.entity_layer = EntityLayer(self.x_size, heads * output_size, device=device)
-        self.relation_layer = RelationLayer(self.g_size, output_size * heads, self.x_size, negative_slope, dropout,
-                                            device=device)
+        self.relation_layer = RelationLayer(self.g_size, output_size * heads, device=device)
 
         self.loss_fct = nn.MarginRankingLoss(margin=margin)
 
@@ -376,7 +346,7 @@ class KBNet(KB):
 
         h = self.dropout(h)
 
-        g_prime = self.relation_layer(h_ijk, self.g_initial, edge_type)
+        g_prime = self.relation_layer(self.g_initial, h_ijk, edge_type)
 
         # computer edge representation for second layer
         h_ijk = torch.cat([h[row, :], h[col, :], g_prime[rel, :]], dim=1)
