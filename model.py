@@ -135,7 +135,7 @@ class RelationLayer(nn.Module):
         super(RelationLayer, self).__init__()
         # relation layer
         self.weights_rel = nn.Linear(in_size, out_size, bias=True)
-        self.fc1 = nn.Linear(h_size + 2 * h_size, out_size, bias=True)
+        self.fc1 = nn.Linear(in_size + 2 * h_size, out_size, bias=True)
         self.init_params()
 
         self.dropout = nn.Dropout(dropout)
@@ -151,13 +151,11 @@ class RelationLayer(nn.Module):
         nn.init.zeros_(self.fc1.bias)
 
     def forward(self, h_ijk, g, edge_type):
-        h_ij = self.fc1(h_ijk)
-
-        g_edges = scatter_add(h_ij, edge_type, dim=0)
+        g_edges = scatter_add(h_ijk, edge_type, dim=0)
         g_edges = F.normalize(g_edges, dim=1, p=2)
         g_edges = F.elu(g_edges)
 
-        g_prime = self.weights_rel(g) + g_edges
+        g_prime = self.weights_rel(g) + self.fc1(g_edges)
 
         return g_prime
 
@@ -338,7 +336,8 @@ class KBNet(KB):
                                                                device=device, concat=False)
 
         self.entity_layer = EntityLayer(self.x_size, heads * output_size, device=device)
-        self.relation_layer = RelationLayer(self.g_size, output_size * heads, device=device)
+        self.relation_layer = RelationLayer(self.g_size, output_size * heads, self.x_size, negative_slope, dropout,
+                                            device=device)
 
         self.loss_fct = nn.MarginRankingLoss(margin=margin)
 
@@ -377,7 +376,7 @@ class KBNet(KB):
 
         h = self.dropout(h)
 
-        g_prime = self.relation_layer(self.g_initial)
+        g_prime = self.relation_layer(h_ijk, self.g_initial, edge_type)
 
         # computer edge representation for second layer
         h_ijk = torch.cat([h[row, :], h[col, :], g_prime[rel, :]], dim=1)
