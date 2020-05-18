@@ -29,14 +29,21 @@ def get_encoder(args, x, g):
     margin = args.margin
     dropout = args.dropout
     negative_slope = args.negative_slope
+    args.use_simple_relation = args.use_simple_relation == 1
+    args.backprop_relation = args.backprop_relation == 1
+    args.backprop_entity = args.backprop_entity == 1
 
     dev = args.device
 
     model = None
     if model_name == KBAT:
-        model = KBNet(x, g,  o_size, heads, margin, dropout, negative_slope=negative_slope, device=dev)
+        model = KBNet(x, g, o_size, heads, margin, dropout, negative_slope=negative_slope,
+                      use_simple_relation=args.use_simple_relation,backprop_entity=args.backprop_entity, backprop_relation=args.backprop_relation, device=dev)
     elif model_name == DKBAT:
-        model = DKBATNet(x, g,  o_size, heads, margin, dropout, negative_slope=negative_slope,
+        model = DKBATNet(x, g, o_size, heads, margin, dropout, negative_slope=negative_slope,
+                         use_simple_relation=args.use_simple_relation,
+                         backprop_entity=args.backprop_entity,
+                         backprop_relation=args.backprop_relation,
                          device=dev)
 
     return model
@@ -105,7 +112,7 @@ def load_model(path):
     return state_dict, epoch, args
 
 
-def load_decoder_eval(encoder_name, data_loader,h, g):
+def load_decoder_eval(encoder_name, data_loader, h, g):
     dataset_name = data_loader.get_name()
     path = osp.join(DECODER_DIR, DECODER_NAME + '_' + encoder_name.lower() + '_' + dataset_name.lower() + '.pt')
     state_dict, epoch, args = load_model(path)
@@ -131,7 +138,7 @@ def save_embeddings(h, g, model_name):
 
 
 def load_encoder_eval(model_name, data_loader):
-    x, g,_ = data_loader.load('train')
+    x, g, _ = data_loader.load('train')
     dataset_name = data_loader.get_name()
 
     path = osp.join(ENCODER_DIR, model_name.lower() + '_' + dataset_name.lower() + '.pt')

@@ -10,4 +10,4 @@
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
 
 conda activate dgat
-python train_encoder.py --eval 1000  --use_paths 1 --use_partial 1 --debug 0 --model DKBAT --dataset FB15K-237 --batch -1 --margin 1 --epochs 3000 --step_size 500
+python train_encoder.py --eval 1000  --use_paths 1 --use_partial 1 --debug 0 --model DKBAT --dataset FB15K-237 --margin 1 --batch 2000 --negative_ratio 4 --epochs 1000 --step_size 250

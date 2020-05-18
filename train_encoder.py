@@ -9,6 +9,7 @@ import wandb
 
 from data.dataset import FB15, WN18, KINSHIP
 from dataloader import DataLoader
+from discriminator import Discriminator
 from metrics import get_model_metrics
 from utilis import save_best_encoder, set_random_seed, save_model, ENCODER, KBAT, DKBAT, get_encoder, get_data_loader
 
@@ -35,6 +36,8 @@ def train_encoder(args, model, data_loader):
     negative_ratio = args.negative_ratio
     use_paths = args.use_paths == 1
     use_partial = args.use_partial == 1
+    use_adversarial = args.use_adversarial == 1
+    use_simple_relation = args.use_simple_relation == 1
 
     # encoder save file path
     dataset_name = data_loader.get_name()
@@ -44,9 +47,12 @@ def train_encoder(args, model, data_loader):
     x, g, graph = data_loader.load_train('cpu')
     n = x.shape[0]
 
+    # discriminator
+    if use_adversarial:
+        discriminator = Discriminator(n, g.shape[0], args.output_encoder * args.heads, 100, dev)
     # load graph base structure
     edge_idx, edge_type = data_loader.graph2idx(graph, dev='cpu')
-    path_idx, path_type = data_loader.load_paths(use_paths,use_partial,dev='cpu')
+    path_idx, path_type = data_loader.load_paths(use_paths, use_partial, dev='cpu')
 
     # load train edges
     train_idx, train_type = edge_idx.clone(), edge_type.clone()
@@ -67,6 +73,8 @@ def train_encoder(args, model, data_loader):
 
     # optimizer and scheduler for training
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
+    if use_adversarial:
+        optimizer_D = optim.Adam(discriminator.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, last_epoch=-1, gamma=0.5)
 
     if use_paths:
@@ -97,6 +105,7 @@ def train_encoder(args, model, data_loader):
         losses_epoch = []
         # all train edges
         for itt in range(0, m, batch_size):
+
             s_batch = time.time()
             # get batch boundaries
             start = itt
@@ -123,20 +132,37 @@ def train_encoder(args, model, data_loader):
                                      use_paths)
             t_forward = time.time()
 
+            torch.cuda.empty_cache()
+
+            # discriminator loss
+            if use_adversarial:
+                loss_D = discriminator.discriminator_loss(h_prime, g_prime, edge_idx, edge_type)
+
+            if use_adversarial:
+                adversarial_reg_entities = discriminator.adversarial_loss_entities(h_prime)
+                adversarial_reg_relations = discriminator.adversarial_loss_relations(g_prime)
             # compute model loss for positive and negative samples
             s_loss = time.time()
 
-            loss = model.loss(h_prime, g_prime,
-                              batch_pos_idx.to(dev),
-                              batch_type.to(dev),
-                              batch_neg_idx.to(dev),
-                              batch_type.to(dev))
+            loss_graph = model.loss(h_prime, g_prime,
+                                    batch_pos_idx.to(dev),
+                                    batch_type.to(dev),
+                                    batch_neg_idx.to(dev),
+                                    batch_type.to(dev))
             t_loss = time.time()
-
-            torch.cuda.empty_cache()
-
+            if use_adversarial:
+                loss = loss_graph + (adversarial_reg_relations + adversarial_reg_entities) / 2
+            else:
+                loss = loss_graph
             # optimization
             s_optim = time.time()
+
+            # generator
+            if use_adversarial:
+                optimizer_D.zero_grad()
+                loss_D.backward()
+                optimizer_D.step()
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -152,39 +178,76 @@ def train_encoder(args, model, data_loader):
                       'Forward time: %.2f ' % (t_forward - s_forward) +
                       'Loss time: %.2f ' % (t_loss - s_loss) +
                       'Optim time: %.2f ' % (t_optim - s_optim) +
-                      'Loss Batch: %.4f ' % (losses_epoch[-1]))
+                      'Loss Graph: %.4f ' % (loss_graph.item()) +
+                      'Loss Encoder: %.4f ' % (losses_epoch[-1]) +
+                      ('Loss Discriminator: %.4f ' % (loss_D.item()) if use_adversarial else ''))
 
         loss_epoch = sum(losses_epoch) / len(losses_epoch)
-
         # compute validation loss
         model.eval()
         h_prime, g_prime = model(train_idx.to(dev), train_type.to(dev), path_idx.to(dev), path_type.to(dev), use_paths)
-        valid_loss = model.loss(h_prime, g_prime, valid_pos_edge_epoch_idx.to(dev), valid_pos_edge_epoch_type.to(dev),
-                                valid_neg_edge_idx.to(dev), valid_pos_edge_epoch_type.to(dev)).item()
 
         scheduler.step()
 
         t_epcoh = time.time()
 
-        print('Epoch: %.d ' % (epoch + 1) +
-              'Epoch time: %.4f ' % (t_epcoh - s_epoch) +
-              'Loss Epoch: %.4f ' % loss_epoch +
-              'Loss Valid: %.4f ' % valid_loss)
-
         save_best_encoder(model, args.model, h_prime, g_prime, loss_epoch, epoch + 1, encoder_file, args, asc=False)
         torch.cuda.empty_cache()
         if (epoch + 1) % eval == 0:
+            size_valid = valid_pos_edge_epoch_idx.shape[1]
+            valid_losses = []
+            for itt in range(0, size_valid, batch_size):
+                start = itt
+                end = itt + batch_size
+
+                # get batch data
+                valid_pos_batch_idx = valid_pos_edge_epoch_idx[:, start:end]
+                valid_pos_batch_type = valid_pos_edge_epoch_type[start:end]
+                valid_neg_batch_idx = valid_neg_edge_idx[start:end]
+                valid_neg_batch_type = valid_pos_edge_epoch_type[start:end]
+
+                loss = model.loss(h_prime, g_prime, valid_pos_batch_idx.to(dev),
+                                  valid_pos_batch_type.to(dev),
+                                  valid_neg_batch_idx.to(dev),
+                                  valid_neg_batch_type.to(dev)).item()
+                valid_losses.append(loss)
+            valid_loss = sum(valid_losses) / len(valid_losses)
+
             encoder_epoch_file = ENCODER + '_' + args.model.lower() + '_' + dataset_name.lower() + '_' + str(
                 epoch) + '.pt'
-            save_model(model, loss_epoch, epoch + 1, encoder_epoch_file, args)
+            save_model(model, valid_loss, epoch + 1, encoder_epoch_file, args)
             metrics = get_model_metrics(data_loader, h_prime, g_prime, 'test', model, ENCODER, dev=args.device)
             metrics['train_' + dataset_name + '_Loss_encoder'] = loss_epoch
             metrics['valid_' + dataset_name + '_Loss_encoder'] = valid_loss
             wandb.log(metrics)
-        else:
+        elif (epoch + 1) % 10 == 0:
+
+            size_valid = valid_pos_edge_epoch_idx.shape[1]
+            valid_losses = []
+            for itt in range(0, size_valid, batch_size):
+                start = itt
+                end = itt + batch_size
+
+                # get batch data
+                valid_pos_batch_idx = valid_pos_edge_epoch_idx[:, start:end]
+                valid_pos_batch_type = valid_pos_edge_epoch_type[start:end]
+                valid_neg_batch_idx = valid_neg_edge_idx[start:end]
+                valid_neg_batch_type = valid_pos_edge_epoch_type[start:end]
+
+                loss = model.loss(h_prime, g_prime, valid_pos_batch_idx.to(dev),
+                                  valid_pos_batch_type.to(dev),
+                                  valid_neg_batch_idx.to(dev),
+                                  valid_neg_batch_type.to(dev)).item()
+                valid_losses.append(loss)
+            valid_loss = sum(valid_losses) / len(valid_losses)
+
             wandb.log({'train_' + dataset_name + '_Loss_encoder': loss_epoch,
                        'valid_' + dataset_name + '_Loss_encoder': valid_loss})
 
+            print('Epoch: %.d ' % (epoch + 1) +
+                  'Epoch time: %.4f ' % (t_epcoh - s_epoch) +
+                  'Loss Epoch: %.4f ' % loss_epoch +
+                  'Loss Valid Graph Structure: %.4f ' % valid_loss)
         del h_prime, g_prime, loss
         torch.cuda.empty_cache()
 
@@ -213,17 +276,17 @@ def main():
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval", type=int, default=100, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
+    parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
-    parser.add_argument("--step_size", type=int, default=500, help="Step size of scheduler.")
+    parser.add_argument("--epochs", type=int, default=1000, help="Number of training epochs for encoder.")
+    parser.add_argument("--step_size", type=int, default=250, help="Step size of scheduler.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-6, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="out for training.")
-    parser.add_argument("--dataset", type=str, default=FB15, help="Dataset used for training.")
-    parser.add_argument("--batch", type=int, default=-1, help="Batch size, -1 for full batch.")
-    parser.add_argument("--negative_ratio", type=int, default=2, help="Number of negative edges per positive one.")
+    parser.add_argument("--dataset", type=str, default=WN18, help="Dataset used for training.")
+    parser.add_argument("--batch", type=int, default=2000, help="Batch size, -1 for full batch.")
+    parser.add_argument("--negative_ratio", type=int, default=4, help="Number of negative edges per positive one.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
@@ -231,12 +294,16 @@ def main():
     # path arguments
     parser.add_argument("--use_paths", type=int, default=0, help="Use paths.")
     parser.add_argument("--use_partial", type=int, default=0, help="Use a subsample of paths.")
+    parser.add_argument("--use_adversarial", type=int, default=0, help="Use a adversarial training.")
+    parser.add_argument("--use_simple_relation", type=int, default=0, help="Use simple relation layer.")
+    parser.add_argument("--backprop_relation", type=int, default=1, help="Backprop to the relation layer.")
+    parser.add_argument("--backprop_entity", type=int, default=1, help="Backprop to the entity layer.")
 
     # encoder parameters
     parser.add_argument("--negative_slope", type=float, default=0.2, help="Negative slope for Leaky Relu")
     parser.add_argument("--heads", type=int, default=2, help="Number of heads per layer")
-    parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
-    parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
+    parser.add_argument("--output_encoder", type=int, default=400, help="Number of neurons per output layer")
+    parser.add_argument("--model", type=str, default=KBAT, help='Model name')
 
     args, cmdline_args = parser.parse_known_args()
 
