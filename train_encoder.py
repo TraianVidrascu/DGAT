@@ -308,7 +308,7 @@ def main():
     # encoder parameters
     parser.add_argument("--negative_slope", type=float, default=0.2, help="Negative slope for Leaky Relu")
     parser.add_argument("--heads", type=int, default=2, help="Number of heads per layer")
-    parser.add_argument("--output_encoder", type=int, default=400, help="Number of neurons per output layer")
+    parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
     parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
 
     args, cmdline_args = parser.parse_known_args()
