@@ -392,7 +392,10 @@ class KBNet(KB):
         if self.use_simple_relation:
             g_prime = self.relation_layer(self.g_initial)
         else:
-            g_prime = self.relation_layer(self.g_initial, h_ijk, edge_type)
+            if use_path:
+                g_prime = self.relation_layer(self.g_initial, h_ijk[:edge_type.shape[0], :], edge_type)
+            else:
+                g_prime = self.relation_layer(self.g_initial, h_ijk, edge_type)
 
         # computer edge representation for second layer
         h_ijk = torch.cat([h[row, :], h[col, :], g_prime[rel, :]], dim=1)
