@@ -183,22 +183,24 @@ def train_encoder(args, model, data_loader):
                       ('Loss Discriminator: %.4f ' % (loss_D.item()) if use_adversarial else ''))
 
         loss_epoch = sum(losses_epoch) / len(losses_epoch)
-        # compute validation loss
-        model.eval()
-        h_prime, g_prime = model(train_idx.to(dev), train_type.to(dev), path_idx.to(dev), path_type.to(dev), use_paths)
 
         scheduler.step()
 
         t_epcoh = time.time()
 
-        save_best_encoder(model, args.model, h_prime, g_prime, loss_epoch, epoch + 1, encoder_file, args, asc=False)
         torch.cuda.empty_cache()
         if (epoch + 1) % eval == 0:
             size_valid = valid_pos_edge_epoch_idx.shape[1]
             valid_losses = []
+            model.eval()
+            with torch.no_grad():
+                h_prime, g_prime = model(train_idx.to(dev), train_type.to(dev), path_idx.to(dev), path_type.to(dev),
+                                         use_paths)
             for itt in range(0, size_valid, batch_size):
                 start = itt
                 end = itt + batch_size
+                # compute validation loss
+                model.eval()
 
                 # get batch data
                 valid_pos_batch_idx = valid_pos_edge_epoch_idx[:, start:end]
@@ -211,6 +213,7 @@ def train_encoder(args, model, data_loader):
                                   valid_neg_batch_idx.to(dev),
                                   valid_neg_batch_type.to(dev)).item()
                 valid_losses.append(loss)
+
             valid_loss = sum(valid_losses) / len(valid_losses)
 
             encoder_epoch_file = ENCODER + '_' + args.model.lower() + '_' + dataset_name.lower() + '_' + str(
@@ -220,10 +223,15 @@ def train_encoder(args, model, data_loader):
             metrics['train_' + dataset_name + '_Loss_encoder'] = loss_epoch
             metrics['valid_' + dataset_name + '_Loss_encoder'] = valid_loss
             wandb.log(metrics)
+            del h_prime, g_prime, loss
         elif (epoch + 1) % 10 == 0:
 
             size_valid = valid_pos_edge_epoch_idx.shape[1]
             valid_losses = []
+            model.eval()
+            with torch.no_grad():
+                h_prime, g_prime = model(train_idx.to(dev), train_type.to(dev), path_idx.to(dev), path_type.to(dev),
+                                         use_paths)
             for itt in range(0, size_valid, batch_size):
                 start = itt
                 end = itt + batch_size
@@ -237,7 +245,7 @@ def train_encoder(args, model, data_loader):
                 loss = model.loss(h_prime, g_prime, valid_pos_batch_idx.to(dev),
                                   valid_pos_batch_type.to(dev),
                                   valid_neg_batch_idx.to(dev),
-                                  valid_neg_batch_type.to(dev))
+                                  valid_neg_batch_type.to(dev)).item()
                 valid_losses.append(loss)
             valid_loss = sum(valid_losses) / len(valid_losses)
 
@@ -248,13 +256,14 @@ def train_encoder(args, model, data_loader):
                   'Epoch time: %.4f ' % (t_epcoh - s_epoch) +
                   'Loss Epoch: %.4f ' % loss_epoch +
                   'Loss Valid Graph Structure: %.4f ' % valid_loss)
+            del h_prime, g_prime, loss
         else:
             wandb.log({'train_' + dataset_name + '_Loss_encoder': loss_epoch})
 
             print('Epoch: %.d ' % (epoch + 1) +
                   'Epoch time: %.4f ' % (t_epcoh - s_epoch) +
                   'Loss Epoch: %.4f ' % loss_epoch)
-        del h_prime, g_prime, loss
+
         torch.cuda.empty_cache()
 
     del x, g, graph, model, valid_loss
