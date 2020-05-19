@@ -294,8 +294,8 @@ def main():
     parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=1000, help="Number of training epochs for encoder.")
-    parser.add_argument("--step_size", type=int, default=250, help="Step size of scheduler.")
+    parser.add_argument("--epochs", type=int, default=200, help="Number of training epochs for encoder.")
+    parser.add_argument("--step_size", type=int, default=50, help="Step size of scheduler.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-6, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="out for training.")
