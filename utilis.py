@@ -29,21 +29,23 @@ def get_encoder(args, x, g):
     margin = args.margin
     dropout = args.dropout
     negative_slope = args.negative_slope
+    channels = args.channels
     args.use_simple_relation = args.use_simple_relation == 1
     args.backprop_relation = args.backprop_relation == 1
     args.backprop_entity = args.backprop_entity == 1
-
     dev = args.device
 
     model = None
     if model_name == KBAT:
         model = KBNet(x, g, o_size, heads, margin, dropout, negative_slope=negative_slope,
-                      use_simple_relation=args.use_simple_relation,backprop_entity=args.backprop_entity, backprop_relation=args.backprop_relation, device=dev)
+                      use_simple_relation=args.use_simple_relation,backprop_entity=args.backprop_entity, backprop_relation=args.backprop_relation,
+                      channels=channels,device=dev)
     elif model_name == DKBAT:
         model = DKBATNet(x, g, o_size, heads, margin, dropout, negative_slope=negative_slope,
                          use_simple_relation=args.use_simple_relation,
                          backprop_entity=args.backprop_entity,
                          backprop_relation=args.backprop_relation,
+                         channels=channels,
                          device=dev)
 
     return model

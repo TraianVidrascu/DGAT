@@ -160,19 +160,20 @@ class MergeLayer(nn.Module):
 
 
 class KB(nn.Module):
-    def __init__(self, x, g, hidden_size, backprop_relation, backprop_entity, dev='cpu'):
+    def __init__(self, x, g, hidden_size, backprop_relation, backprop_entity, channels, dev='cpu'):
         super(KB, self).__init__()
         self.x_size = x.shape[1]
         self.g_size = g.shape[1]
         self.n = x.shape[0]
         self.m = g.shape[0]
+        self.channels = channels
 
         self.x_initial = nn.Parameter(x, requires_grad=backprop_entity)
         self.g_initial = nn.Parameter(g, requires_grad=backprop_relation)
         # self.magnitude = nn.Parameter(torch.rand((self.n, 1)), requires_grad=True)
         # nn.init.ones_(self.magnitude.data)
         # self.ent2rel = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.conv = ConvKB(hidden_size, 3, 1, 50, 0.3, dev)
+        self.conv = ConvKB(hidden_size, 3, 1, channels, 0.3, dev)
 
         self.to(dev)
 
@@ -225,8 +226,9 @@ class DKBATNet(KB):
                  use_simple_relation=True,
                  backprop_entity=True,
                  backprop_relation=True,
+                 channels=50,
                  device='cpu'):
-        super(DKBATNet, self).__init__(x, g, output_size * heads, backprop_relation, backprop_entity, device)
+        super(DKBATNet, self).__init__(x, g, output_size * heads, backprop_relation, backprop_entity, channels, device)
         self.inbound_input_layer = RelationalAttentionLayer(self.x_size, self.g_size, output_size, heads,
                                                             negative_slope=negative_slope,
                                                             dropout=dropout,
@@ -302,7 +304,10 @@ class DKBATNet(KB):
         if self.use_simple_relation:
             g_prime = self.relation_layer(self.g_initial)
         else:
-            g_prime = self.relation_layer(self.g_initial, h_ijk, edge_type)
+            if use_path:
+                g_prime = self.relation_layer(self.g_initial, h_ijk[:edge_type.shape[0], :], edge_type)
+            else:
+                g_prime = self.relation_layer(self.g_initial, h_ijk, edge_type)
 
         # compute edge representation for second layer
         h_ijk = torch.cat([h[row, :], h[col, :], g_prime[rel, :]], dim=1)
@@ -332,8 +337,9 @@ class KBNet(KB):
                  use_simple_relation=True,
                  backprop_entity=True,
                  backprop_relation=True,
+                 channels=50,
                  device='cpu'):
-        super(KBNet, self).__init__(x, g, output_size * heads, backprop_relation, backprop_entity, device)
+        super(KBNet, self).__init__(x, g, output_size * heads, backprop_relation, backprop_entity, channels, device)
         self.input_attention_layer = RelationalAttentionLayer(self.x_size, self.g_size, output_size, heads,
                                                               negative_slope=negative_slope,
                                                               dropout=dropout,

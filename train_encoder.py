@@ -77,12 +77,8 @@ def train_encoder(args, model, data_loader):
         optimizer_D = optim.Adam(discriminator.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, last_epoch=-1, gamma=0.5)
 
-    if use_paths:
-        batch_size = train_idx.shape[1] + path_idx.shape[1]
-        m = train_idx.shape[1] + path_idx.shape[1]
-    else:
-        batch_size = train_idx.shape[1]
-        m = train_idx.shape[1]
+    batch_size = train_idx.shape[1]
+    m = train_idx.shape[1]
 
     if args.batch > 0:
         batch_size = args.batch
@@ -116,7 +112,7 @@ def train_encoder(args, model, data_loader):
             batch_type = train_type[start:end]
             batch_head_invalid_sampling = train_head_invalid_sampling[start:end]
             batch_tail_invalid_sampling = train_tail_invalid_sampling[start:end]
-
+        
             # get positive and negative samples for direct edges in batch
             s_sampling = time.time()
             batch_pos_idx, batch_neg_idx, batch_type = data_loader.negative_samples(n, batch_idx, batch_type,
@@ -307,7 +303,7 @@ def main():
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
 
     # path arguments
-    parser.add_argument("--use_paths", type=int, default=0, help="Use paths.")
+    parser.add_argument("--use_paths", type=int, default=1, help="Use paths.")
     parser.add_argument("--use_partial", type=int, default=0, help="Use a subsample of paths.")
     parser.add_argument("--use_adversarial", type=int, default=0, help="Use a adversarial training.")
     parser.add_argument("--use_simple_relation", type=int, default=0, help="Use simple relation layer.")
@@ -317,8 +313,10 @@ def main():
     # encoder parameters
     parser.add_argument("--negative_slope", type=float, default=0.2, help="Negative slope for Leaky Relu")
     parser.add_argument("--heads", type=int, default=2, help="Number of heads per layer")
-    parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
+    parser.add_argument("--output_encoder", type=int, default=400, help="Number of neurons per output layer")
     parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
+
+    parser.add_argument("--channels", type=float, default=50, help="channels for decoder")
 
     args, cmdline_args = parser.parse_known_args()
 
