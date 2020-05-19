@@ -205,7 +205,7 @@ def train_encoder(args, model, data_loader):
                 # get batch data
                 valid_pos_batch_idx = valid_pos_edge_epoch_idx[:, start:end]
                 valid_pos_batch_type = valid_pos_edge_epoch_type[start:end]
-                valid_neg_batch_idx = valid_neg_edge_idx[start:end]
+                valid_neg_batch_idx = valid_neg_edge_idx[:, start:end]
                 valid_neg_batch_type = valid_pos_edge_epoch_type[start:end]
 
                 loss = model.loss(h_prime, g_prime, valid_pos_batch_idx.to(dev),
