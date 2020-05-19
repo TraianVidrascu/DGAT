@@ -216,7 +216,18 @@ class KB(nn.Module):
     def evaluate(self, h, g, eval_idx, eval_type):
         with torch.no_grad():
             self.eval()
-            scores = torch.detach(self._dissimilarity(h, g, eval_idx, eval_type).cpu())
+            n = eval_idx.shape[0]
+            if n > 15000:
+                step = n//4
+                scores = []
+                for i in range(0, n, step):
+                    batch_idx, batch_type = eval_idx[:, i:i + step], eval_type[i:i + step]
+
+                    preds = torch.detach(self._dissimilarity(h, g, batch_idx, batch_type).cpu())
+                    scores.append(preds)
+                scores = torch.cat(scores)
+            else:
+                scores = torch.detach(self._dissimilarity(h, g, eval_idx, eval_type).cpu())
             return scores
 
 

@@ -38,8 +38,9 @@ def get_encoder(args, x, g):
     model = None
     if model_name == KBAT:
         model = KBNet(x, g, o_size, heads, margin, dropout, negative_slope=negative_slope,
-                      use_simple_relation=args.use_simple_relation,backprop_entity=args.backprop_entity, backprop_relation=args.backprop_relation,
-                      channels=channels,device=dev)
+                      use_simple_relation=args.use_simple_relation, backprop_entity=args.backprop_entity,
+                      backprop_relation=args.backprop_relation,
+                      channels=channels, device=dev)
     elif model_name == DKBAT:
         model = DKBATNet(x, g, o_size, heads, margin, dropout, negative_slope=negative_slope,
                          use_simple_relation=args.use_simple_relation,
