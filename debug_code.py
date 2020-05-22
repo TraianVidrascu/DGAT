@@ -3,6 +3,7 @@ from functools import reduce
 import concurrent.futures
 import numpy as np
 import pandas as pd
+import pickle as pk
 import torch
 
 import sklearn as sk
@@ -30,6 +31,7 @@ def verify_evaluation(data_loader):
     head = False
     file = data_loader.get_filtered_eval_file(fold, head)
     valid_triplets = list(map(lambda x: tuple(x), dataset.get_valid_triplets().t().tolist()))
+    idx = 0
     while True:
         edge_idx, edge_type, position = data_loader.load_list(file, head, 'cuda')
 
@@ -42,7 +44,8 @@ def verify_evaluation(data_loader):
             res = triplet in valid_triplets
             if res:
                 print(triplet, len(eval_triplets))
-
+        idx += 1
+        print('done %.d' % idx)
         if position > 0:
             print('pula')
             break
@@ -82,5 +85,12 @@ if __name__ == '__main__':
     # print(decoder)
     # print(my_decoder['model_state_dict'])
 
-    dataset = FB15Dataset()
-    dataset.pre_process()
+    # dataset = Kinship()
+    # ldr = DataLoader(dataset)
+    # verify_evaluation(ldr)
+
+    # file = './data/FB15k-237/2hop.pickle'
+    # with open(file, 'rb') as f:
+    #     a = pk.load(f)
+    # print(a)
+    pass

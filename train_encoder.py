@@ -15,7 +15,7 @@ from utilis import save_best_encoder, set_random_seed, save_model, ENCODER, KBAT
 
 
 def train_encoder(args, model, data_loader):
-    model_name = args.model + "_encoder"
+    model_name = args.model + "_encoder_final_experiments"
     # set up weights and biases
     if args.debug == 1:
         model_name += '_debug'
@@ -295,9 +295,9 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-6, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="out for training.")
-    parser.add_argument("--dataset", type=str, default=WN18, help="Dataset used for training.")
-    parser.add_argument("--batch", type=int, default=1000, help="Batch size, -1 for full batch.")
-    parser.add_argument("--negative_ratio", type=int, default=4, help="Number of negative edges per positive one.")
+    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for training.")
+    parser.add_argument("--batch", type=int, default=-1, help="Batch size, -1 for full batch.")
+    parser.add_argument("--negative_ratio", type=int, default=2, help="Number of negative edges per positive one.")
 
     # objective function parameters
     parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
@@ -316,7 +316,6 @@ def main():
     parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
     parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
 
-    parser.add_argument("--channels", type=int, default=50, help="channels for decoder")
 
     args, cmdline_args = parser.parse_known_args()
 

@@ -5,9 +5,9 @@ import torch.nn.functional as F
 
 CUDA = torch.cuda.is_available()
 
+
 class SpecialSpmmFunctionFinal(torch.autograd.Function):
     """Special function for only sparse region backpropataion layer."""
-
     @staticmethod
     def forward(ctx, edge, edge_w, N, E, out_features):
         # assert indices.requires_grad == False
@@ -27,7 +27,7 @@ class SpecialSpmmFunctionFinal(torch.autograd.Function):
         if ctx.needs_input_grad[1]:
             edge_sources = ctx.indices
 
-            if (CUDA):
+            if(CUDA):
                 edge_sources = edge_sources.cuda()
 
             grad_values = grad_output[edge_sources]
@@ -47,12 +47,13 @@ class SpGraphAttentionLayer(nn.Module):
     Sparse version GAT layer, similar to https://arxiv.org/abs/1710.10903
     """
 
-    def __init__(self, num_nodes, in_features, out_features, nrela_dim, dropout, alpha):
+    def __init__(self, num_nodes, in_features, out_features, nrela_dim, dropout, alpha, concat=True):
         super(SpGraphAttentionLayer, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.num_nodes = num_nodes
         self.alpha = alpha
+        self.concat = concat
         self.nrela_dim = nrela_dim
 
         self.a = nn.Parameter(torch.zeros(
@@ -65,22 +66,32 @@ class SpGraphAttentionLayer(nn.Module):
         self.leakyrelu = nn.LeakyReLU(self.alpha)
         self.special_spmm_final = SpecialSpmmFinal()
 
-    def forward(self, input, edge, edge_embed):
+    def forward(self, input, edge, edge_embed, edge_list_nhop, edge_embed_nhop):
         N = input.size()[0]
 
-        edge_h = torch.cat((input[edge[0, :], :], input[edge[1, :], :], edge_embed[:, :]), dim=1).t()
+        # Self-attention on the nodes - Shared attention mechanism
+        edge = torch.cat((edge[:, :], edge_list_nhop[:, :]), dim=1)
+        edge_embed = torch.cat(
+            (edge_embed[:, :], edge_embed_nhop[:, :]), dim=0)
+
+        edge_h = torch.cat(
+            (input[edge[0, :], :], input[edge[1, :], :], edge_embed[:, :]), dim=1).t()
+        # edge_h: (2*in_dim + nrela_dim) x E
 
         edge_m = self.a.mm(edge_h)
         # edge_m: D * E
 
         # to be checked later
-        powers = self.leakyrelu(self.a_2.mm(edge_m).squeeze())
+        powers = -self.leakyrelu(self.a_2.mm(edge_m).squeeze())
         edge_e = torch.exp(powers).unsqueeze(1)
+        assert not torch.isnan(edge_e).any()
         # edge_e: E
 
         e_rowsum = self.special_spmm_final(
             edge, edge_e, N, edge_e.shape[0], 1)
+        e_rowsum[e_rowsum == 0.0] = 1e-12
 
+        e_rowsum = e_rowsum
         # e_rowsum: N x 1
         edge_e = edge_e.squeeze(1)
 
@@ -93,11 +104,18 @@ class SpGraphAttentionLayer(nn.Module):
         h_prime = self.special_spmm_final(
             edge, edge_w, N, edge_w.shape[0], self.out_features)
 
+        assert not torch.isnan(h_prime).any()
         # h_prime: N x out
         h_prime = h_prime.div(e_rowsum)
         # h_prime: N x out
 
-        return F.elu(h_prime)
+        assert not torch.isnan(h_prime).any()
+        if self.concat:
+            # if this layer is not last layer,
+            return F.elu(h_prime)
+        else:
+            # if this layer is last layer,
+            return h_prime
 
     def __repr__(self):
         return self.__class__.__name__ + ' (' + str(self.in_features) + ' -> ' + str(self.out_features) + ')'

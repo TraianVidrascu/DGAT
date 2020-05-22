@@ -160,57 +160,30 @@ class MergeLayer(nn.Module):
 
 
 class KB(nn.Module):
-    def __init__(self, x, g, hidden_size, backprop_relation, backprop_entity, channels, dev='cpu'):
+    def __init__(self, x, g, backprop_relation, backprop_entity, dev='cpu'):
         super(KB, self).__init__()
         self.x_size = x.shape[1]
         self.g_size = g.shape[1]
         self.n = x.shape[0]
         self.m = g.shape[0]
-        self.channels = channels
 
         self.x_initial = nn.Parameter(x, requires_grad=backprop_entity)
         self.g_initial = nn.Parameter(g, requires_grad=backprop_relation)
-        # self.magnitude = nn.Parameter(torch.rand((self.n, 1)), requires_grad=True)
-        # nn.init.ones_(self.magnitude.data)
-        # self.ent2rel = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.conv = ConvKB(hidden_size, 3, 1, channels, 0.3, dev)
 
         self.to(dev)
-
-        self.init_params()
-        self.soft_margin_loss = nn.SoftMarginLoss()
-
-    def init_params(self):
-        # nn.init.xavier_normal_(self.ent2rel.weight, gain=1.414)
-        # nn.init.xavier_normal_(self.ent2rel.weight, gain=1.414)
-        pass
 
     def _dissimilarity(self, h, g, edge_idx, edge_type):
         torch.cuda.empty_cache()
         row, col = edge_idx
-        # h_i_rel = self.ent2rel(h[row, :])
-        # h_j_rel = self.ent2rel(h[col, :])
-        # g_k = g[edge_type, :]  # self.rel_adjust(torch.cat([g[edge_type, :], h[col, :]], dim=1))
-        h_ijk = torch.stack(
-            [h[row, :], g[edge_type, :], h[col, :]],
-            dim=1)
-        # head = h[row, :]
-        # tail = h[col, :]
-        # rel = g[edge_type]
-        # magnitude = self.magnitude[col, :]
-
-        preds = self.conv(h_ijk)
-        # d_norm = torch.norm(head + rel * magnitude - tail, p=1, dim=-1)
-        return preds  # d_norm
+        d_norm = torch.norm(h[row, :] + g[edge_type] - h[col, :], p=1, dim=-1)
+        return d_norm
 
     def loss(self, h_prime, g_prime, pos_edge_idx, pos_edge_type, neg_edge_idx, neg_edge_type):
         # Margin loss
         d_pos = self._dissimilarity(h_prime, g_prime, pos_edge_idx, pos_edge_type)
         d_neg = self._dissimilarity(h_prime, g_prime, neg_edge_idx, neg_edge_type)
-        # y = torch.ones(d_pos.shape[0]).to(d_pos.device)
-        # loss = self.loss_fct(d_pos, d_neg, y)
         y = torch.ones(d_pos.shape[0]).to(d_pos.device)
-        loss = self.loss_fct(d_pos.squeeze(-1), d_neg.squeeze(-1), y)
+        loss = self.loss_fct(d_pos, d_neg, y)
         return loss
 
     def evaluate(self, h, g, eval_idx, eval_type):
@@ -218,7 +191,7 @@ class KB(nn.Module):
             self.eval()
             n = eval_idx.shape[0]
             if n > 15000:
-                step = n//4
+                step = n // 4
                 scores = []
                 for i in range(0, n, step):
                     batch_idx, batch_type = eval_idx[:, i:i + step], eval_type[i:i + step]
@@ -237,9 +210,8 @@ class DKBATNet(KB):
                  use_simple_relation=True,
                  backprop_entity=True,
                  backprop_relation=True,
-                 channels=50,
                  device='cpu'):
-        super(DKBATNet, self).__init__(x, g, output_size * heads, backprop_relation, backprop_entity, channels, device)
+        super(DKBATNet, self).__init__(x, g, backprop_relation, backprop_entity, device)
         self.inbound_input_layer = RelationalAttentionLayer(self.x_size, self.g_size, output_size, heads,
                                                             negative_slope=negative_slope,
                                                             dropout=dropout,
@@ -348,9 +320,8 @@ class KBNet(KB):
                  use_simple_relation=True,
                  backprop_entity=True,
                  backprop_relation=True,
-                 channels=50,
                  device='cpu'):
-        super(KBNet, self).__init__(x, g, output_size * heads, backprop_relation, backprop_entity, channels, device)
+        super(KBNet, self).__init__(x, g, backprop_relation, backprop_entity, device)
         self.input_attention_layer = RelationalAttentionLayer(self.x_size, self.g_size, output_size, heads,
                                                               negative_slope=negative_slope,
                                                               dropout=dropout,
@@ -435,63 +406,6 @@ class KBNet(KB):
 
         return h_prime, g_prime
 
-
-class WrapperConvKB(nn.Module):
-    def __init__(self, h, g, input_dim, input_seq_len, in_channels, out_channels, drop_prob=0.0, dev='cpu'):
-        super(WrapperConvKB, self).__init__()
-        self.conv = ConvKB(input_dim, input_seq_len, in_channels, out_channels, drop_prob, dev)
-
-        self.node_embeddings = nn.Parameter(h, requires_grad=True)
-        self.rel_embeddings = nn.Parameter(g, requires_grad=True)
-
-        self.dev = dev
-        self.out_channels = out_channels
-        self.to(dev)
-
-    def forward(self, edge_idx, edge_type):
-        row, col = edge_idx
-
-        h_ijk = torch.stack(
-            [self.node_embeddings[row, :], self.rel_embeddings[edge_type, :], self.node_embeddings[col, :]],
-            dim=1).to(self.dev)
-
-        preds = self.conv(h_ijk)
-        return preds
-
-    def evaluate(self, _, __, edge_idx, edge_type):
-        with torch.no_grad():
-            self.eval()
-            n = edge_idx.shape[1]
-
-            if n > 15000:
-                step = n // 4
-                scores = []
-                for i in range(0, n, step):
-                    batch_idx, batch_type = edge_idx[:, i:i + step], edge_type[i:i + step]
-                    preds = torch.detach(self.forward(batch_idx, batch_type).view(-1).cpu())
-                    scores.append(preds)
-                scores = torch.cat(scores)
-            else:
-                scores = torch.detach(self.forward(edge_idx, edge_type).view(-1).cpu())
-        return scores
-
-
-class ConvKB(nn.Module):
-    def __init__(self, input_dim, input_seq_len, in_channels, out_channels, drop_prob=0.0, dev='cpu'):
-        super().__init__()
-
-        self.conv_layer = nn.Conv2d(
-            in_channels, out_channels, (1, input_seq_len))  # kernel size -> 1*input_seq_length(i.e. 2)
-        self.dropout = nn.Dropout(drop_prob)
-        self.non_linearity = nn.ReLU()
-        self.fc_layer = nn.Linear((input_dim) * out_channels, 1)
-
-        nn.init.xavier_uniform_(self.fc_layer.weight, gain=1.414)
-        nn.init.xavier_uniform_(self.conv_layer.weight, gain=1.414)
-
-        self.dev = dev
-        self.to(dev)
-
     def forward(self, conv_input):
         batch_size, length, dim = conv_input.size()
         # assuming inputs are of the form ->
@@ -505,54 +419,4 @@ class ConvKB(nn.Module):
 
         input_fc = out_conv.squeeze(-1).view(batch_size, -1)
         output = self.fc_layer(input_fc)
-        return output
-
-
-class PartModel(nn.Module):
-    def __init__(self, x_initial, g_initial, input_dim, input_seq_len, in_channels, out_channels=50, drop_prob=0.0,
-                 dev='cpu'):
-        super().__init__()
-        self.conv_layer = nn.Conv2d(
-            in_channels, out_channels, (1, input_seq_len))
-
-        self.fc1_layer = nn.Linear((input_dim) * out_channels, 50)
-        self.fc2_layer = nn.Linear(50, 1)
-
-        self.x_initial = nn.Parameter(x_initial.clone(), requires_grad=False)
-        self.g_initial = nn.Parameter(g_initial.clone(), requires_grad=False)
-
-        self.x = nn.Parameter(x_initial, requires_grad=True)
-        self.g = nn.Parameter(g_initial, requires_grad=True)
-
-        nn.init.xavier_uniform_(self.fc1_layer.weight, gain=1.414)
-        nn.init.xavier_uniform_(self.fc2_layer.weight, gain=1.414)
-        nn.init.xavier_uniform_(self.conv_layer.weight, gain=1.414)
-
-        self.non_linearity = nn.ReLU()
-        self.dropout = nn.Dropout(drop_prob)
-
-        self.to(dev)
-        self.dev = dev
-
-    def forward(self, edge_idx, edge_type):
-        row, col = edge_idx
-
-        conv_input = torch.stack(
-            [self.x[row, :], self.g[edge_type, :], self.g[col, :], self.x_initial[row, :], self.g_initial[edge_type, :],
-             self.x_initial[col, :]],
-            dim=1).to(self.dev)
-
-        batch_size, length, dim = conv_input.size()
-        # assuming inputs are of the form ->
-        conv_input = conv_input.transpose(1, 2)
-        # batch * length(which is 3 here -> entity,relation,entity) * dim
-        # To make tensor of size 4, where second dim is for input channels
-        conv_input = conv_input.unsqueeze(1)
-
-        out_conv = self.dropout(
-            self.non_linearity(self.conv_layer(conv_input)))
-
-        input_fc = out_conv.squeeze(-1).view(batch_size, -1)
-        output = self.fc1_layer(input_fc)
-        output = self.fc2_layer(output)
         return output
