@@ -175,7 +175,7 @@ class KB(nn.Module):
     def _dissimilarity(self, h, g, edge_idx, edge_type):
         torch.cuda.empty_cache()
         row, col = edge_idx
-        d_norm = torch.norm(h[row, :] + g[edge_type] - h[col, :], p=1, dim=-1)
+        d_norm = torch.norm(h[row, :] + g[edge_type] - h[col, :], p=1, dim=1)
         return d_norm
 
     def loss(self, h_prime, g_prime, pos_edge_idx, pos_edge_type, neg_edge_idx, neg_edge_type):
@@ -338,7 +338,6 @@ class KBNet(KB):
             self.relation_layer = RelationLayer(self.g_size, output_size * heads, device=device)
 
         self.loss_fct = nn.MarginRankingLoss(margin=margin)
-        self.loss_adv = nn.BCELoss()
 
         self.heads = heads
         self.output_size = output_size
