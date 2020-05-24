@@ -97,7 +97,7 @@ def main_encoder():
 
     # evaluation parameters
     parser.add_argument("--model", type=str, default=DKBAT, help="Model used for evaluation")
-    parser.add_argument("--dataset", type=str, default=FB15, help="Dataset used for evaluation.")
+    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for evaluation.")
     parser.add_argument("--fold", type=str, default='test', help="Fold used for evaluation.")
     parser.add_argument("--head", type=int, default=0, help="Head or tail evaluation.")
 

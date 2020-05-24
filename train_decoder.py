@@ -11,7 +11,6 @@ from metrics import get_model_metrics
 from utilis import save_best_decoder, set_random_seed, load_embedding, save_embeddings, \
     DECODER, EMBEDDING_DIR, KBAT, get_decoder, DECODER_NAME, get_data_loader, save_model, DKBAT
 
-from torch.optim.lr_scheduler import CyclicLR
 
 
 def train_decoder(args, decoder, data_loader, h, g):
@@ -37,6 +36,7 @@ def train_decoder(args, decoder, data_loader, h, g):
 
     optim = torch.optim.SGD(decoder.parameters(), lr=lr, momentum=0.9, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optim, gamma=0.5, step_size=step_size)
+    torch.nn.utils.clip_grad_norm(decoder.parameters(), 1)
 
     train_pos_idx, train_pos_type = data_loader.graph2idx(graph, dev='cpu')
     train_head_invalid_sampling, train_tail_invalid_sampling = data_loader.load_invalid_sampling('train')
@@ -143,17 +143,17 @@ def main():
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval", type=int, default=100, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
+    parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=400, help="Number of training epochs for decoder.")
+    parser.add_argument("--epochs", type=int, default=200, help="Number of training epochs for decoder.")
     parser.add_argument("--step_size", type=int, default=25, help="Step size of scheduler.")
-    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
+    parser.add_argument("--lr", type=float, default=1e-1, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-5, help="L2 normalization weight decay decoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout for training")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size for decoder.")
-    parser.add_argument("--negative-ratio", type=int, default=40, help="Number of negative samples.")
-    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for training.")
+    parser.add_argument("--negative-ratio", type=int, default=10, help="Number of negative samples.")
+    parser.add_argument("--dataset", type=str, default=WN18, help="Dataset used for training.")
     parser.add_argument("--model", type=str, default=DKBAT, help="Which model's embedding to use.")
     # objective function parameters
 

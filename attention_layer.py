@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter_add
 
-from relation_embedding_layer import RelationLayer
 
 
 class RelationalAttentionLayer(nn.Module):

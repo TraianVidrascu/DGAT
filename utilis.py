@@ -5,7 +5,16 @@ import wandb
 from data.dataset import FB15, FB15Dataset, WN18, WN18RR, KINSHIP, Kinship
 from dataloader import DataLoader
 from decoder_model import WrapperConvKB
+from dissimilarities import TransE, TransR, ModE, Hake
 from model import KBNet, DKBATNet
+
+HAKE = 'HAKE'
+
+MOD_E = 'ModE'
+
+TRANS_R = 'TransR'
+
+TRANS_E = 'TransE'
 
 ENCODER = 'encoder'
 DKBAT = 'DKBAT'
@@ -22,6 +31,18 @@ DECODER = 'decoder'
 DECODER_NAME = 'ConvKB'
 
 
+def get_dissimilarity(name, embedding_size=None):
+    if name == TRANS_E:
+        return TransE()
+    if name == TRANS_R:
+        return TransR(embedding_size)
+    if name == MOD_E:
+        return ModE()
+    if name == HAKE:
+        return Hake(embedding_size)
+    return None
+
+
 def get_encoder(args, x, g):
     # model parameters
     model_name = args.model
@@ -34,18 +55,23 @@ def get_encoder(args, x, g):
     args.backprop_relation = args.backprop_relation == 1
     args.backprop_entity = args.backprop_entity == 1
     dev = args.device
-
+    try:
+        dissimilarity = get_dissimilarity(args.dissimilarity, o_size * heads)
+    except AttributeError:
+        dissimilarity = get_dissimilarity(TRANS_E)
     model = None
     if model_name == KBAT:
         model = KBNet(x, g, o_size, heads, margin, dropout, negative_slope=negative_slope,
                       use_simple_relation=args.use_simple_relation, backprop_entity=args.backprop_entity,
                       backprop_relation=args.backprop_relation,
-                    device=dev)
+                      dissimilarity=dissimilarity,
+                      device=dev)
     elif model_name == DKBAT:
         model = DKBATNet(x, g, o_size, heads, margin, dropout, negative_slope=negative_slope,
                          use_simple_relation=args.use_simple_relation,
                          backprop_entity=args.backprop_entity,
                          backprop_relation=args.backprop_relation,
+                         dissimilarity=dissimilarity,
                          device=dev)
 
     return model

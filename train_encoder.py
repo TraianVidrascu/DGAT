@@ -11,7 +11,8 @@ from data.dataset import FB15, WN18, KINSHIP
 from dataloader import DataLoader
 from discriminator import Discriminator
 from metrics import get_model_metrics
-from utilis import save_best_encoder, set_random_seed, save_model, ENCODER, KBAT, DKBAT, get_encoder, get_data_loader
+from utilis import save_best_encoder, set_random_seed, save_model, ENCODER, KBAT, DKBAT, get_encoder, get_data_loader, \
+    TRANS_E, TRANS_R, MOD_E, HAKE
 
 
 def train_encoder(args, model, data_loader):
@@ -74,6 +75,8 @@ def train_encoder(args, model, data_loader):
 
     # optimizer and scheduler for training
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
+    torch.nn.utils.clip_grad_norm(model.parameters(), 1)
+
     if use_adversarial:
         optimizer_D = optim.Adam(discriminator.parameters(), lr=lr, weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, last_epoch=-1, gamma=0.5)
@@ -241,34 +244,37 @@ def main():
 
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
-    parser.add_argument("--eval", type=int, default=100, help="After how many epochs to evaluate.")
+    parser.add_argument("--eval", type=int, default=1000, help="After how many epochs to evaluate.")
     parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
     parser.add_argument("--step_size", type=int, default=500, help="Step size of scheduler.")
-    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
+    parser.add_argument("--lr", type=float, default=1e-1, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-6, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="out for training.")
-    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for training.")
+    parser.add_argument("--dataset", type=str, default=WN18, help="Dataset used for training.")
     parser.add_argument("--batch", type=int, default=-1, help="Batch size, -1 for full batch.")
     parser.add_argument("--negative_ratio", type=int, default=2, help="Number of negative edges per positive one.")
 
     # objective function parameters
-    parser.add_argument("--margin", type=int, default=1, help="Margin for loss function.")
+    parser.add_argument("--margin", type=int, default=5, help="Margin for loss function.")
 
     # path arguments
-    parser.add_argument("--use_paths", type=int, default=1, help="Use paths.")
+    parser.add_argument("--use_paths", type=int, default=0, help="Use paths.")
     parser.add_argument("--use_partial", type=int, default=0, help="Use a subsample of paths.")
     parser.add_argument("--use_adversarial", type=int, default=0, help="Use a adversarial training.")
     parser.add_argument("--use_simple_relation", type=int, default=0, help="Use simple relation layer.")
     parser.add_argument("--backprop_relation", type=int, default=1, help="Backprop to the relation layer.")
     parser.add_argument("--backprop_entity", type=int, default=0, help="Backprop to the entity layer.")
 
+    # dissimilarity function
+    parser.add_argument("--dissimilarity", type=str, default=TRANS_E, help="Dissimilarity score of the loss function.")
+
     # encoder parameters
     parser.add_argument("--negative_slope", type=float, default=0.2, help="Negative slope for Leaky Relu")
     parser.add_argument("--heads", type=int, default=2, help="Number of heads per layer")
-    parser.add_argument("--output_encoder", type=int, default=400, help="Number of neurons per output layer")
+    parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
     parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
 
     args, cmdline_args = parser.parse_known_args()

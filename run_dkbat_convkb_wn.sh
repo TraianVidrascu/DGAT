@@ -10,4 +10,4 @@
 #SBATCH --mail-user=traian.vidrascu@student.uva.nl
 
 conda activate dgat
-python train_decoder.py --debug 0 --model DKBAT --channels 500 --dropout 0 --batch_size 128 --negative-ratio 40 --eval 100 --epochs 200 --dataset WN18RR
+python train_decoder.py --debug 0 --model DKBAT --channels 50 --dropout 0 --batch_size 128 --negative-ratio 40 --eval 200 --epochs 200 --dataset WN18RR

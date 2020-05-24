@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter_add, scatter_mean
 
+from dissimilarities import Dissimilarity, TransE
 from relation_embedding_layer import RelationLayer, SimpleRelationLayer
 
 
@@ -160,23 +161,20 @@ class MergeLayer(nn.Module):
 
 
 class KB(nn.Module):
-    def __init__(self, x, g, backprop_relation, backprop_entity, dev='cpu'):
+    def __init__(self, x, g, backprop_relation, backprop_entity, dissimilarity: Dissimilarity,
+                 dev='cpu'):
         super(KB, self).__init__()
         self.x_size = x.shape[1]
         self.g_size = g.shape[1]
         self.n = x.shape[0]
         self.m = g.shape[0]
+        self.hidden_size = g.shape[0]
 
         self.x_initial = nn.Parameter(x, requires_grad=backprop_entity)
         self.g_initial = nn.Parameter(g, requires_grad=backprop_relation)
 
+        self._dissimilarity = dissimilarity
         self.to(dev)
-
-    def _dissimilarity(self, h, g, edge_idx, edge_type):
-        torch.cuda.empty_cache()
-        row, col = edge_idx
-        d_norm = torch.norm(h[row, :] + g[edge_type] - h[col, :], p=1, dim=1)
-        return d_norm
 
     def loss(self, h_prime, g_prime, pos_edge_idx, pos_edge_type, neg_edge_idx, neg_edge_type):
         # Margin loss
@@ -210,8 +208,10 @@ class DKBATNet(KB):
                  use_simple_relation=True,
                  backprop_entity=True,
                  backprop_relation=True,
+                 dissimilarity: Dissimilarity = TransE(),
                  device='cpu'):
-        super(DKBATNet, self).__init__(x, g, backprop_relation, backprop_entity, device)
+        super(DKBATNet, self).__init__(x, g,  backprop_relation, backprop_entity, dissimilarity,
+                                       device)
         self.inbound_input_layer = RelationalAttentionLayer(self.x_size, self.g_size, output_size, heads,
                                                             negative_slope=negative_slope,
                                                             dropout=dropout,
@@ -320,8 +320,10 @@ class KBNet(KB):
                  use_simple_relation=True,
                  backprop_entity=True,
                  backprop_relation=True,
+                 dissimilarity: Dissimilarity = TransE(),
                  device='cpu'):
-        super(KBNet, self).__init__(x, g, backprop_relation, backprop_entity, device)
+        super(KBNet, self).__init__(x, g, backprop_relation, backprop_entity, dissimilarity,
+                                    device)
         self.input_attention_layer = RelationalAttentionLayer(self.x_size, self.g_size, output_size, heads,
                                                               negative_slope=negative_slope,
                                                               dropout=dropout,
