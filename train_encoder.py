@@ -237,7 +237,7 @@ def main():
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval", type=int, default=100, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
+    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
@@ -257,8 +257,8 @@ def main():
     parser.add_argument("--use_partial", type=int, default=0, help="Use a subsample of paths.")
     parser.add_argument("--use_adversarial", type=int, default=0, help="Use a adversarial training.")
     parser.add_argument("--use_simple_relation", type=int, default=0, help="Use simple relation layer.")
-    parser.add_argument("--backprop_relation", type=int, default=1, help="Backprop to the relation layer.")
-    parser.add_argument("--backprop_entity", type=int, default=1, help="Backprop to the entity layer.")
+    parser.add_argument("--backprop_relation", type=int, default=0, help="Backprop to the relation layer.")
+    parser.add_argument("--backprop_entity", type=int, default=0, help="Backprop to the entity layer.")
 
     # encoder parameters
     parser.add_argument("--negative_slope", type=float, default=0.2, help="Negative slope for Leaky Relu")
