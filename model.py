@@ -404,18 +404,3 @@ class KBNet(KB):
         h_prime = F.normalize(h_prime, p=2, dim=1)
 
         return h_prime, g_prime
-
-    def forward(self, conv_input):
-        batch_size, length, dim = conv_input.size()
-        # assuming inputs are of the form ->
-        conv_input = conv_input.transpose(1, 2)
-        # batch * length(which is 3 here -> entity,relation,entity) * dim
-        # To make tensor of size 4, where second dim is for input channels
-        conv_input = conv_input.unsqueeze(1)
-
-        out_conv = self.dropout(
-            self.non_linearity(self.conv_layer(conv_input)))
-
-        input_fc = out_conv.squeeze(-1).view(batch_size, -1)
-        output = self.fc_layer(input_fc)
-        return output

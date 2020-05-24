@@ -15,6 +15,7 @@ from utilis import save_best_encoder, set_random_seed, save_model, ENCODER, KBAT
 
 
 def train_encoder(args, model, data_loader):
+    train_discriminator = 0
     model_name = args.model + "_encoder_final_experiments"
     # set up weights and biases
     if args.debug == 1:
@@ -38,7 +39,7 @@ def train_encoder(args, model, data_loader):
     use_partial = args.use_partial == 1
     use_adversarial = args.use_adversarial == 1
     use_simple_relation = args.use_simple_relation == 1
-
+    last_loss = 100.
     # encoder save file path
     dataset_name = data_loader.get_name()
     encoder_file = ENCODER + '_' + args.model.lower() + '_' + dataset_name.lower() + '.pt'
@@ -131,7 +132,7 @@ def train_encoder(args, model, data_loader):
             torch.cuda.empty_cache()
 
             # discriminator loss
-            if use_adversarial:
+            if use_adversarial and (epoch + 1) >= train_discriminator:
                 loss_D = discriminator.discriminator_loss(h_prime, g_prime, edge_idx, edge_type)
 
             if use_adversarial:
@@ -153,16 +154,19 @@ def train_encoder(args, model, data_loader):
             # optimization
             s_optim = time.time()
 
-            # generator
-            if use_adversarial:
-                optimizer_D.zero_grad()
-                loss_D.backward()
-                optimizer_D.step()
-
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             t_optim = time.time()
+
+            # generator
+            if use_adversarial and (epoch + 1) >= train_discriminator and (last_loss > 0.5 or last_loss > loss.item()):
+                optimizer_D.zero_grad()
+                loss_D.backward()
+                optimizer_D.step()
+
+            if use_adversarial and (epoch + 1):
+                last_loss = loss_D.item()
 
             losses_epoch.append(loss.item())
 
@@ -176,7 +180,8 @@ def train_encoder(args, model, data_loader):
                       'Optim time: %.2f ' % (t_optim - s_optim) +
                       'Loss Graph: %.4f ' % (loss_graph.item()) +
                       'Loss Encoder: %.4f ' % (losses_epoch[-1]) +
-                      ('Loss Discriminator: %.4f ' % (loss_D.item()) if use_adversarial else ''))
+                      ('Loss Discriminator: %.4f ' % (loss_D.item()) if use_adversarial and (
+                              epoch + 1) >= train_discriminator else ''))
 
         loss_epoch = sum(losses_epoch) / len(losses_epoch)
 
@@ -237,7 +242,7 @@ def main():
     # system parameters
     parser.add_argument("--device", type=str, default='cuda', help="Device to use for training.")
     parser.add_argument("--eval", type=int, default=100, help="After how many epochs to evaluate.")
-    parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
+    parser.add_argument("--debug", type=int, default=1, help="Debugging mod.")
 
     # training parameters
     parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
@@ -257,7 +262,7 @@ def main():
     parser.add_argument("--use_partial", type=int, default=0, help="Use a subsample of paths.")
     parser.add_argument("--use_adversarial", type=int, default=0, help="Use a adversarial training.")
     parser.add_argument("--use_simple_relation", type=int, default=0, help="Use simple relation layer.")
-    parser.add_argument("--backprop_relation", type=int, default=0, help="Backprop to the relation layer.")
+    parser.add_argument("--backprop_relation", type=int, default=1, help="Backprop to the relation layer.")
     parser.add_argument("--backprop_entity", type=int, default=0, help="Backprop to the entity layer.")
 
     # encoder parameters

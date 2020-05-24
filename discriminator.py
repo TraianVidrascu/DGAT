@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter_mean, scatter_add
 
+from torch.distributions import Normal
+
 
 class Discriminator(nn.Module):
     def __init__(self, x_size, g_size, embedding_size, hidden_size, dev='cpu'):
@@ -16,14 +18,16 @@ class Discriminator(nn.Module):
         self.fc3_rel = nn.Linear(hidden_size, 1, bias=True)
 
         self.dev = dev
-        self.to(dev)
         self.init_params()
 
         self.x_size = x_size
         self.g_size = g_size
         self.embedding_size = embedding_size
 
+        self.distribution = Normal(torch.zeros(self.embedding_size).float(), torch.ones(self.embedding_size).float())
+
         self.loss_fct = nn.BCELoss()
+        self.to(dev)
 
     def init_params(self):
         nn.init.xavier_normal_(self.fc1_entity.weight, gain=1.414)
@@ -45,35 +49,36 @@ class Discriminator(nn.Module):
     def pred_entity(self, h):
         h = self.fc1_entity(h)
         h = F.elu(h)
-        h = self.fc2_entity(h)
-        h = F.elu(h)
+        # h = self.fc2_entity(h)
+        # h = F.elu(h)
         h = self.fc3_entity(h)
         pred_h = torch.sigmoid(h)
         return pred_h.squeeze()
 
     def pred_rel(self, g):
-        g = self.fc1_rel(g)
+        g = self.fc1_entity(g)
         g = F.elu(g)
-        g = self.fc2_rel(g)
-        g = F.elu(g)
-        g = self.fc3_rel(g)
+        # g = self.fc2_entity(g)
+        # g = F.elu(g)
+        g = self.fc3_entity(g)
         pred_g = torch.sigmoid(g)
         return pred_g.squeeze()
 
     def forward(self, h, g):
         h = self.fc1_entity(h)
         h = F.elu(h)
-        h = self.fc2_entity(h)
-        h = F.elu(h)
+        # h = self.fc2_entity(h)
+        # h = F.elu(h)
         h = self.fc3_entity(h)
         pred_h = torch.sigmoid(h)
 
-        g = self.fc1_rel(g)
+        g = self.fc1_entity(g)
         g = F.elu(g)
-        g = self.fc2_rel(g)
-        g = F.elu(g)
-        g = self.fc3_rel(g)
+        # g = self.fc2_entity(g)
+        # g = F.elu(g)
+        g = self.fc3_entity(g)
         pred_g = torch.sigmoid(g)
+
         return pred_h.squeeze(), pred_g.squeeze()
 
     def loss(self, preds, y):
@@ -86,7 +91,7 @@ class Discriminator(nn.Module):
         return loss
 
     def loss_entity_embeddings(self, h, edge_idx, edge_type):
-        z = self.sample_gaussian()
+        z = self.sample_gaussian(h.shape[0])
         preds_real = self.pred_entity(z)
         preds_fake = self.pred_entity(h.detach())
         loss_real = self.real_loss(preds_real)
@@ -94,7 +99,7 @@ class Discriminator(nn.Module):
         return (loss_real + loss_fake) / 2
 
     def loss_relation_embeddings(self, g, edge_idx, edge_type):
-        z = self.sample_gaussian()
+        z = self.sample_gaussian(g.shape[0])
         preds_real = self.pred_rel(z)
         preds_fake = self.pred_rel(g.detach())
         loss_real = self.real_loss(preds_real)
@@ -109,10 +114,10 @@ class Discriminator(nn.Module):
     def discriminator_loss(self, h, g, edge_idx, edge_type):
         loss_g = self.loss_relation_embeddings(g, edge_idx, edge_type)
         loss_h = self.loss_entity_embeddings(h, edge_idx, edge_type)
-        return (loss_g + loss_h)/2
+        return (loss_g + loss_h) / 2
 
-    def sample_gaussian(self):
-        z = torch.randn((self.x_size, self.embedding_size)).to(self.dev)
+    def sample_gaussian(self,n):
+        z = self.distribution.sample((n,)).to(self.dev)
         return z.detach()
 
     def adversarial_loss(self, preds_fake):
