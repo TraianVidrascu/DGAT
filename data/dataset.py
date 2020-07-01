@@ -20,6 +20,7 @@ ENDLIST = 'END'
 WN18 = 'WN18RR'
 FB15 = 'FB15K-237'
 KINSHIP = 'Kinship'
+IVY141 = 'Ivy141'
 
 
 class Dataset:
@@ -45,6 +46,17 @@ class Dataset:
             line = line.strip('\n').split('\t')
             key = line[0]
             idx = int(line[1])
+            mapper[key] = idx
+        file.close()
+        return mapper
+
+    def load_mapper(self):
+        file = open(self.raw_dir + 'relation2id.txt', 'r')
+        mapper = {}
+        for line in file:
+            line = line.strip('\n').split('\t')
+            idx = line[0]
+            key = int(line[1])
             mapper[key] = idx
         file.close()
         return mapper
@@ -151,13 +163,13 @@ class Dataset:
         self.read_edges_fold('test', node_mapper, rel_mapper)
 
     def pre_process(self):
-        # x, node_mapper = self.read_entities()
-        # g, rel_mapper = self.read_relations()
-        # self.read_edges(node_mapper, rel_mapper)
-        self.save_paths()
-        # self.filter_evaluation_folds()
-        # valid_triples = self.get_valid_triplets()
-        # self.save_invalid_sampling(valid_triples)
+        x, node_mapper = self.read_entities()
+        g, rel_mapper = self.read_relations()
+        self.read_edges(node_mapper, rel_mapper)
+        # self.save_paths()
+        self.filter_evaluation_folds()
+        valid_triples = self.get_valid_triplets()
+        self.save_invalid_sampling(valid_triples)
 
     @staticmethod
     def find(tensor, values):
@@ -349,13 +361,13 @@ class Dataset:
                 else:
                     neighbors[source] = {}
                     neighbors[source][distance] = temp_neighbors[distance]
-            print('Done: %.d'%source)
+            print('Done: %.d' % source)
         print("time taken ", time.time() - start_time)
 
         print("length of neighbors dict is ", len(neighbors))
         return neighbors
 
-    def  save_paths(self):
+    def save_paths(self):
         neighbors = self.get_further_neighbors()
         path_triplets = []
         partial_paths = []
@@ -493,3 +505,14 @@ class Kinship(Dataset):
         self.size_x = 200
         self.size_g = 200
         self.name = KINSHIP
+
+
+class Ivy(Dataset):
+    def __init__(self):
+        super().__init__('./data/ivy141-all/raw/', './data/ivy141-all/processed/', './data/ivy141-all/evaluation/',
+                         './data/ivy141-all/run/')
+        self.n = 9738
+        self.k = 21
+        self.size_x = 100
+        self.size_g = 150
+        self.name = IVY141

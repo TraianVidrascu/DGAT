@@ -10,7 +10,7 @@ import sklearn as sk
 from sklearn.metrics import euclidean_distances
 from sqlalchemy import create_engine
 
-from data.dataset import FB15Dataset, WN18RR, Kinship
+from data.dataset import FB15Dataset, WN18RR, Kinship, Ivy
 from dataloader import DataLoader
 
 
@@ -76,6 +76,29 @@ def transfer_paper_decoder_2_my_decoder(paper_decoder, decoder):
     torch.save(decoder, file)
 
 
+def rank_triplet(ranking):
+    rank = np.where(ranking == 1)
+    return (rank[0] + 1)
+
+
+def mean_rank(ranks):
+    mr = np.mean(ranks)
+    return mr
+
+
+def mean_reciprocal_rank(ranks):
+    ranks = 1 / ranks
+    mrr = np.mean(ranks)
+    return mrr
+
+
+def hits_at_n(ranks):
+    hits_at_1 = np.sum(ranks == 1) / ranks.shape[0]
+    hits_at_3 = np.sum(ranks <= 3) / ranks.shape[0]
+    hits_at_10 = np.sum(ranks <= 10) / ranks.shape[0]
+    return hits_at_1, hits_at_3, hits_at_10
+
+
 if __name__ == '__main__':
     # file = './eval_dir/decoder/trained_399.pth'
     # decoder = torch.load(file)
@@ -93,4 +116,34 @@ if __name__ == '__main__':
     # with open(file, 'rb') as f:
     #     a = pk.load(f)
     # print(a)
-    pass
+    # no_edges = 100 * 1074
+    # no_nodes = 104
+    # m = 10
+    #
+    # ranking = np.array([i + 1 for i in range(no_nodes)])
+    # ranks = []
+    # for i in range(no_edges):
+    #     np.random.shuffle(ranking)
+    #     rank = rank_triplet(ranking)
+    #     ranks.append(rank)
+    # ranks = np.array(ranks).flatten()
+    #
+    # mr = mean_rank(ranks)
+    # print(mr)
+    # mrr = mean_reciprocal_rank(ranks)
+    # print(mrr)
+    # h1, h3, h10 = hits_at_n(ranks)
+    # print(h1, h3, h10)
+
+    data = Ivy()
+
+    a = data.get_valid_triplets()
+    import networkx as nx
+
+    edges = torch.stack([a[0, :], a[2, :]]).t().tolist()
+
+    g = nx.MultiDiGraph()
+    g.add_edges_from(edges)
+
+    c = nx.number_strongly_connected_components(g)
+    print(c)
