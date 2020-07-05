@@ -248,13 +248,13 @@ def main():
     parser.add_argument("--debug", type=int, default=0, help="Debugging mod.")
 
     # training parameters
-    parser.add_argument("--epochs", type=int, default=1000, help="Number of training epochs for encoder.")
-    parser.add_argument("--step_size", type=int, default=250, help="Step size of scheduler.")
+    parser.add_argument("--epochs", type=int, default=3000, help="Number of training epochs for encoder.")
+    parser.add_argument("--step_size", type=int, default=500, help="Step size of scheduler.")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate.")
     parser.add_argument("--decay", type=float, default=1e-6, help="L2 normalization weight decay encoder.")
     parser.add_argument("--dropout", type=float, default=0.3, help="out for training.")
-    parser.add_argument("--dataset", type=str, default=FB15, help="Dataset used for training.")
-    parser.add_argument("--batch", type=int, default=32000, help="Batch size, -1 for full batch.")
+    parser.add_argument("--dataset", type=str, default=KINSHIP, help="Dataset used for training.")
+    parser.add_argument("--batch", type=int, default=-1, help="Batch size, -1 for full batch.")
     parser.add_argument("--negative_ratio", type=int, default=2, help="Number of negative edges per positive one.")
 
     # objective function parameters
@@ -275,7 +275,7 @@ def main():
     parser.add_argument("--negative_slope", type=float, default=0.2, help="Negative slope for Leaky Relu")
     parser.add_argument("--heads", type=int, default=2, help="Number of heads per layer")
     parser.add_argument("--output_encoder", type=int, default=200, help="Number of neurons per output layer")
-    parser.add_argument("--model", type=str, default=KBAT, help='Model name')
+    parser.add_argument("--model", type=str, default=DKBAT, help='Model name')
 
     args, cmdline_args = parser.parse_known_args()
 
