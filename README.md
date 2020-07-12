@@ -23,6 +23,8 @@ source activate base
 - Ivy v1.4.1 software graph (Private company dataset)
 
 # Reproduce Results (Encoder Only)
+Before running the experiments make an [weights and biases account](https://www.wandb.com/).
+
 - FB15k-237 
 ```bash
 python train_encoder.py --backprop_entity 0 --backprop_relation 1 --eval 1000  --use_paths 0 --use_partial 0 --debug 0 --model DKBAT --dataset FB15K-237 --margin 1 --output_encoder 200 --batch -1 --negative_ratio 2 --epochs 3000 --step_size 250
@@ -37,6 +39,6 @@ python train_encoder.py  --backprop_entity 0 --backprop_relation 1 --eval 1000  
 ```bash
 pyton train_decoder.py --output_encoder 400 --model DKBAT --eval 100 --debug 0 --margin 1 --batch -1 --dataset KINSHIP
 ``` 
-
+All the metrics are printed on the console and saved online on the [weights and biases website](https://www.wandb.com/).
 # License
 [Apache-2.0](https://choosealicense.com/licenses/apache-2.0/) 
